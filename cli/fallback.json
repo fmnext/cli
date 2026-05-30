@@ -1,0 +1,36 @@
+{
+	"metadata": {
+		"version": 1,
+		"type": "gameDB_Fallback",
+		"generator": "ForzaTech CLI Toolkit"
+	},
+	"data": {
+        "List_UpgradeCarBody": {
+            "CarBodyID": 0
+        },
+        "List_UpgradeTireCompound": {
+            "TireModelName": "b"
+        },
+        "Data_Car": {
+            "CarId": 0,
+            "MediaName": "",
+            "Thumbnail": "",
+            "FrontTireWidthMM" : 245,
+            "FrontTireAspect" : 35,
+            "FrontWheelDiameterIN" : 19,
+            "RearTireWidthMM" : 315,
+            "RearTireAspect" : 30,
+            "RearWheelDiameterIN" : 20
+        },
+        "Data_CarBody": {
+            "ModelWheelbase" : 2.42,
+            "ModelFrontTrackOuter": 1.886,
+            "ModelRearTrackOuter": 1.91,
+            "ModelFrontStockRideHeight": 0.07,
+            "ModelRearStockRideHeight": 0.095,
+            "BottomCenterWheelbasePosX": 0.0,
+            "BottomCenterWheelbasePosY": 0.0,
+            "BottomCenterWheelbasePosZ": 0.0
+        }
+	}
+}

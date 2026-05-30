@@ -1,0 +1,22 @@
+[submodule "core"]
+	path = core
+	url = https://github.com/fmnext/core
+[submodule "rapidjson"]
+	path = rapidjson
+	url = https://github.com/fmnext/rapidjson
+	branch = master
+[submodule "DirectXMesh"]
+	path = DirectXMesh
+	url = https://github.com/fmnext/DirectXMesh
+[submodule "DirectXTex"]
+	path = DirectXTex
+	url = https://github.com/fmnext/DirectXTex
+[submodule "gr"]
+	path = gr
+	url = https://github.com/fmnext/gr
+[submodule "sqlite3"]
+	path = sqlite3
+	url = https://github.com/fmnext/sqlite3
+[submodule "deps"]
+	path = deps
+	url = https://github.com/fmnext/deps
