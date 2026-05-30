@@ -1,10 +1,13 @@
 # ForzaTech CLI Toolkit
 
-https://gitlab.com/forzatech/cli
+https://github.com/fmnext/cli
 
-Release available for download on [GitLab](https://forzatech.dev/releases)
+Release available for download on [GitHub](https://github.com/fmnext/cli/releases)
 
 ## Release History
+
+### May 28, 2026 (Release 10)
+* Fixed tire duplicated
 
 ### May 28, 2026 (Release 9)
 * Code cleanup
