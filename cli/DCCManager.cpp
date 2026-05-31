@@ -382,10 +382,6 @@ bool DCCManager::Init()
 		{
 			for (const auto& model : part.models)
 			{
-				std::string tire_path = "game:\\media\\cars\\_library\\scene\\tires\\";
-				tire_path += m_records->TireModelName;
-				tire_path += "\\";
-
 				std::shared_ptr<fmnext::SceneReader::CarRenderModel11> tire_model = std::make_shared<fmnext::SceneReader::CarRenderModel11>();
 				tire_model->bone_id = model->bone_id;
 				tire_model->bone_name = model->bone_name;
@@ -394,7 +390,6 @@ bool DCCManager::Init()
 				tire_model->draw_groups = model->draw_groups;
 				tire_model->transform = model->transform;
 				tire_model->version = model->version;
-				tire_model->path = tire_path;
 				tire_model->type = "Tires";
 
 				std::string position("tire");
@@ -411,14 +406,15 @@ bool DCCManager::Init()
 
 					std::regex_search(key, match_tire, std::regex(regex, std::regex::icase));
 
-					if (match_tire.ready())
+					if (!match_tire.empty())
 					{
-						std::string updated_name(position);
-						updated_name += std::string(key.begin() + regex.size(), key.end());
+						std::string tire_path = "game:\\media\\cars\\_library\\scene\\tires\\";
+						tire_path += m_records->TireModelName;
+						tire_path += std::string(std::string("\\") + position + std::string(key.begin() + regex.size(), key.end()));
 
-						tire_model->path += updated_name;
+						tire_model->path = tire_path;
 
-						if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_model->path; }) == std::end(list_items))
+						if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_path; }) == std::end(list_items))
 						{
 							std::string scheme = "";
 							auto materials = HandleShaders(tire_model, data, scheme);
