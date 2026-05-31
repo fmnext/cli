@@ -447,13 +447,8 @@ bool DCCManager::Init()
 					lOutputPath /= std::filesystem::path(pFile).filename();
 					lOutputPath.make_preferred();
 
-					if (m_big_thumbnail) {
-						auto texture_resolver = fmnext::TextureResolver(*m_big_thumbnail);
-						texture_resolver.SaveToPNGFile(lOutputPath.string());
-					}
-
-					if (m_small_thumbnail) {
-						auto texture_resolver = fmnext::TextureResolver(*m_small_thumbnail);
+					if (m_thumbnail) {
+						auto texture_resolver = fmnext::TextureResolver(*m_thumbnail);
 						texture_resolver.SaveToPNGFile(lOutputPath.string());
 					}
 				};
@@ -463,7 +458,7 @@ bool DCCManager::Init()
 				std::smatch match_big{};
 				std::regex_search(name, match_big, std::regex("_Big.swatchbin", std::regex::icase));
 
-				if (std::filesystem::exists(path) && match_big.ready())
+				if (std::filesystem::exists(path) && !match_big.empty())
 				{
 					auto local_thumbnail = m_game->GetThumbnail(m_records->Thumbnail);
 
@@ -475,7 +470,7 @@ bool DCCManager::Init()
 						auto thumb = fmnext::BundleReader(thumb_blob);
 						if (thumb.Init())
 						{
-							m_big_thumbnail = std::make_unique<fmnext::BundleReader::BundleData>(thumb.bundle);
+							m_thumbnail = std::make_unique<fmnext::BundleReader::BundleData>(thumb.bundle);
 							exportThumbnail(std::filesystem::path(name).filename().replace_extension(".png").string());
 						}
 
@@ -496,7 +491,7 @@ bool DCCManager::Init()
 						auto thumb = fmnext::BundleReader(thumb_blob);
 						if (thumb.Init())
 						{
-							m_small_thumbnail = std::make_unique<fmnext::BundleReader::BundleData>(thumb.bundle);
+							m_thumbnail = std::make_unique<fmnext::BundleReader::BundleData>(thumb.bundle);
 							exportThumbnail(std::filesystem::path(name).filename().replace_extension(".png").string());
 						}
 

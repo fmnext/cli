@@ -135,8 +135,7 @@ private:
     std::shared_ptr<fmnext::BundleReader::BundleData> m_skel = nullptr;
     std::shared_ptr<fmnext::BundleReader::BundleData> m_proxyLOD = nullptr;
     std::shared_ptr<fmnext::BundleReader::BundleData> m_colors = nullptr;
-    std::unique_ptr<fmnext::BundleReader::BundleData> m_big_thumbnail = nullptr;
-    std::unique_ptr<fmnext::BundleReader::BundleData> m_small_thumbnail = nullptr;
+    std::unique_ptr<fmnext::BundleReader::BundleData> m_thumbnail = nullptr;
 
     std::unordered_map<std::string, std::shared_ptr<fmnext::BundleReader::BundleData>> m_tires;
 
