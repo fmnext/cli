@@ -1552,47 +1552,47 @@ FbxMesh* DCCManager::RemoveIsolatedVertices(FbxMesh* prev_mesh)
 	FbxMesh* result = FbxMesh::Create(mManager, "");
 	result->InitControlPoints(static_cast<uint32_t>(absolute_indices.size()));
 
-	// Vertices
-	FbxVector4* prev_control_points = prev_mesh->GetControlPoints();
-	FbxVector4* next_control_points = result->GetControlPoints();
+	{ // Vertices
 
-	for (int32_t i = 0; i < absolute_indices.size(); ++i)
-	{
-		int32_t index = absolute_indices[i];
-		next_control_points[i] = prev_control_points[index];
-	}
+		FbxVector4* prev_control_points = prev_mesh->GetControlPoints();
+		FbxVector4* next_control_points = result->GetControlPoints();
 
-	for (int32_t i = 0; i < prev_mesh->GetPolygonCount(); ++i)
-	{
-		result->BeginPolygon(-1, -1, -1, false);
-
-		for (int32_t j = 0; j < prev_mesh->GetPolygonSize(i); ++j)
-		{
-			int32_t prev_index = prev_mesh->GetPolygonVertex(i, j);
-			int32_t next_index = relative_indices[prev_index];
-			result->AddPolygon(next_index);
-		}
-
-		result->EndPolygon();
-	}
-
-	// Normals
-	FbxLayerElementNormal* prev_mesh_normals = prev_mesh->GetLayer(0)->GetNormals();
-	FbxLayerElementNormal* new_mesh_normals = FbxLayerElementNormal::Create(result, "");
-
-	new_mesh_normals->SetMappingMode(prev_mesh_normals->GetMappingMode());
-	new_mesh_normals->SetReferenceMode(prev_mesh_normals->GetReferenceMode());
-
-	if (prev_mesh_normals->GetMappingMode() == FbxLayerElement::eByControlPoint) // ByVertice Direct
-	{
 		for (int32_t i = 0; i < absolute_indices.size(); ++i)
 		{
-			new_mesh_normals->GetDirectArray().Add(prev_mesh_normals->GetDirectArray().GetAt(absolute_indices[i]));
+			int32_t index = absolute_indices[i];
+			next_control_points[i] = prev_control_points[index];
 		}
 	}
-	else {
-		new_mesh_normals->GetDirectArray() = prev_mesh_normals->GetDirectArray();
-		new_mesh_normals->GetIndexArray() = prev_mesh_normals->GetIndexArray();
+
+	{ // Faces
+
+		for (int32_t i = 0; i < prev_mesh->GetPolygonCount(); ++i)
+		{
+			result->BeginPolygon(-1, -1, -1, false);
+
+			for (int32_t j = 0; j < prev_mesh->GetPolygonSize(i); ++j)
+			{
+				int32_t prev_index = prev_mesh->GetPolygonVertex(i, j);
+				int32_t next_index = relative_indices[prev_index];
+				result->AddPolygon(next_index);
+			}
+
+			result->EndPolygon();
+		}
+	}
+
+	{ // Normals
+
+		FbxLayerElementNormal* prev_mesh_normals = prev_mesh->GetLayer(0)->GetNormals();
+		FbxLayerElementNormal* next_mesh_normals = result->CreateElementNormal();
+
+		next_mesh_normals->SetMappingMode(prev_mesh_normals->GetMappingMode());
+		next_mesh_normals->SetReferenceMode(prev_mesh_normals->GetReferenceMode());
+
+		for (int32_t i = 0; i < absolute_indices.size(); ++i)
+		{
+			next_mesh_normals->GetDirectArray().Add(prev_mesh_normals->GetDirectArray().GetAt(absolute_indices[i]));
+		}
 	}
 
 	for (uint32_t id = 0; id < static_cast<uint32_t>(prev_mesh->GetLayerCount()); ++id)
