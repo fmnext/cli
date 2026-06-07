@@ -396,17 +396,17 @@ bool DCCManager::Init()
 				position += GetContainerDirection(model->bone_name);
 
 				//{ "tireL", "tireL", "tireL", "tireL" };     =  previous
-				//{ "tireL", "tireL", "tireR", "tireR" };     =  current
-				//{ "tireLF", "tireLR", "tireRF", "tireRR" }; =  supposed/current
+				//{ "tireL", "tireL", "tireR", "tireR" };     =  previous/current
+				//{ "tireLF", "tireLR", "tireRF", "tireRR" }; =  current/fixed
 
 				for (const auto& [key, data] : m_tires)
 				{
 					std::smatch match_tire{};
 					std::string regex = (m_tires.size() <= 2) ? std::string(position.begin(), position.end() - 1) : position;
 
-					std::regex_search(key, match_tire, std::regex(regex, std::regex::icase));
-
-					if (!match_tire.empty())
+					switch (static_cast<uint32_t>(m_tires.size()))
+					{
+					case 0x01:
 					{
 						std::string tire_path = "game:\\media\\cars\\_library\\scene\\tires\\";
 						tire_path += m_records->TireModelName;
@@ -421,6 +421,32 @@ bool DCCManager::Init()
 
 							list_items.emplace_back(upgrade_id, tire_model, data, materials, scheme, 8);
 						}
+						break;
+					}
+					case 0x02:
+					case 0x04:
+					{
+						if (std::regex_search(key, match_tire, std::regex(regex, std::regex::icase)))
+						{
+							std::string tire_path = "game:\\media\\cars\\_library\\scene\\tires\\";
+							tire_path += m_records->TireModelName;
+							tire_path += std::string(std::string("\\") + position + std::string(key.begin() + regex.size(), key.end()));
+
+							tire_model->path = tire_path;
+
+							if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_path; }) == std::end(list_items))
+							{
+								std::string scheme = "";
+								auto materials = HandleShaders(tire_model, data, scheme);
+
+								list_items.emplace_back(upgrade_id, tire_model, data, materials, scheme, 8);
+							}
+						}
+						break;
+					}
+					default:
+						printf("Warning: Unsupported number of tire entries found: 0x%02X \n", static_cast<uint32_t>(m_tires.size()));
+						break;
 					}
 				}
 			}
