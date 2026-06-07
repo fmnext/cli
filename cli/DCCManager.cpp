@@ -408,13 +408,11 @@ bool DCCManager::Init()
 					{
 					case 0x01:
 					{
-						std::string tire_path = "game:\\media\\cars\\_library\\scene\\tires\\";
-						tire_path += m_records->TireModelName;
-						tire_path += std::string(std::string("\\") + position + std::string(key.begin() + regex.size(), key.end()));
+						tire_model->path = "game:\\media\\cars\\_library\\scene\\tires\\";
+						tire_model->path += m_records->TireModelName;
+						tire_model->path += std::string(std::string("\\") + position + std::string(key.begin() + regex.size(), key.end()));
 
-						tire_model->path = tire_path;
-
-						if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_path; }) == std::end(list_items))
+						if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_model->path; }) == std::end(list_items))
 						{
 							std::string scheme = "";
 							auto materials = HandleShaders(tire_model, data, scheme);
@@ -428,13 +426,11 @@ bool DCCManager::Init()
 					{
 						if (std::regex_search(key, match_tire, std::regex(regex, std::regex::icase)))
 						{
-							std::string tire_path = "game:\\media\\cars\\_library\\scene\\tires\\";
-							tire_path += m_records->TireModelName;
-							tire_path += std::string(std::string("\\") + position + std::string(key.begin() + regex.size(), key.end()));
+							tire_model->path = "game:\\media\\cars\\_library\\scene\\tires\\";
+							tire_model->path += m_records->TireModelName;
+							tire_model->path += std::string(std::string("\\") + position + std::string(key.begin() + regex.size(), key.end()));
 
-							tire_model->path = tire_path;
-
-							if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_path; }) == std::end(list_items))
+							if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_model->path; }) == std::end(list_items))
 							{
 								std::string scheme = "";
 								auto materials = HandleShaders(tire_model, data, scheme);
