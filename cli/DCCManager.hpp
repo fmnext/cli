@@ -1,5 +1,6 @@
 #pragma once
 #include <fbxsdk.h>
+#include <sstream>
 
 #include "MeshResolver.hpp"
 #include "ContainerReader.hpp"
@@ -12,6 +13,8 @@
 
 #include <rapidjson/document.h>
 #include <rapidjson/istreamwrapper.h>
+#include <rapidjson/ostreamwrapper.h>
+#include <rapidjson/prettywriter.h>
 
 #ifdef IOS_REF
 #undef  IOS_REF
@@ -624,6 +627,11 @@ private:
         return std::string("{}");
     }
 
+    std::string GetStringGUIDWithoutBraces(const std::string& guid)
+    {
+        return std::string(guid.begin() + 1, guid.end() - 2 /* 2 = with nullterminator */);
+    }
+
     void HandleProxyLOD()
     {
         auto resolver = fmnext::MeshResolver(m_proxyLOD, m_lod, static_cast<fmnext::GeometryType>(m_geo));
@@ -974,4 +982,9 @@ private:
 
         return blob;
     }
+    
+    rapidjson::Value StringToValue(const std::string& value, rapidjson::Document::AllocatorType& allocator);
+    std::string GetHexHash(int value);
+    rapidjson::Value GetShaderParametersArray(std::shared_ptr<fmnext::BundleReader::BundleData> bundle, rapidjson::Document::AllocatorType& allocator);
+    void ExportManufacturerColors();
 };

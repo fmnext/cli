@@ -659,6 +659,8 @@ bool DCCManager::Init()
 
 	m_colors = GetBundleData("ManufacturerColors.bin");
 
+	ExportManufacturerColors();
+
 	if (m_colors != nullptr) //!m_colors->ManufacturerColors.empty()
 	{
 		if (!m_colors->ManufacturerColors.empty())
@@ -1826,4 +1828,313 @@ int DCCManager::InitStateMachine(const std::vector<char>& state)
 	CharacterFile = 0;
 
 	return EXIT_SUCCESS;
+}
+
+rapidjson::Value DCCManager::StringToValue(const std::string& value, rapidjson::Document::AllocatorType& allocator)
+{
+	rapidjson::Value result(rapidjson::kStringType);
+	result.SetString(value.c_str(), static_cast<rapidjson::SizeType>(value.size()), allocator);
+
+	return result;
+}
+
+void DCCManager::ExportManufacturerColors()
+{
+	rapidjson::Document json_document{};
+	json_document.SetObject();
+
+	rapidjson::Value document_entries(rapidjson::kArrayType);
+
+	rapidjson::Value metadata_object(rapidjson::kObjectType);
+	metadata_object.AddMember("version", 1, json_document.GetAllocator());
+	metadata_object.AddMember("type", "ManufacturerColors", json_document.GetAllocator());
+	metadata_object.AddMember("generator", "ForzaTech CLI Toolkit", json_document.GetAllocator());
+
+	json_document.AddMember("metadata", metadata_object, json_document.GetAllocator());
+
+	if (m_colors != nullptr) {
+
+		for (auto it = m_colors->ManufacturerColors.begin(); it != m_colors->ManufacturerColors.end(); ++it)
+		{
+			size_t index = std::distance(m_colors->ManufacturerColors.begin(), it);
+
+			rapidjson::Value json_object(rapidjson::kObjectType);
+			json_object.AddMember("Color_Set", index, json_document.GetAllocator());
+
+			rapidjson::Value array(rapidjson::kArrayType);
+
+			for (auto colors = it->begin(); colors != it->end(); ++colors)
+			{
+				size_t idx = std::distance(it->begin(), colors);
+
+				rapidjson::Value color_object(rapidjson::kObjectType);
+
+				color_object.AddMember("Index_Mask", colors->material_index_mask.value(), json_document.GetAllocator());
+				color_object.AddMember("Path", StringToValue(colors->path, json_document.GetAllocator()), json_document.GetAllocator());
+
+				rapidjson::Value preview_color(rapidjson::kArrayType);
+				preview_color.PushBack(colors->preview_color.x, json_document.GetAllocator());
+				preview_color.PushBack(colors->preview_color.y, json_document.GetAllocator());
+				preview_color.PushBack(colors->preview_color.z, json_document.GetAllocator());
+
+				color_object.AddMember("Preview_Color", preview_color, json_document.GetAllocator());
+
+				{
+					std::string path = m_game->Remove(colors->path).string();
+					std::replace(path.begin(), path.end(), '\\', '/');
+
+					std::vector<char> blob = FindAssetInContainer(path, 0);
+
+					if (!blob.empty())
+					{
+						color_object.AddMember("Shader_Parameters", GetShaderParametersArray(GetBundleData(blob), json_document.GetAllocator()), json_document.GetAllocator());
+						blob.clear();
+					}
+				}
+				array.PushBack(color_object, json_document.GetAllocator());
+			}
+
+			json_object.AddMember("Data", array, json_document.GetAllocator());
+			document_entries.PushBack(json_object, json_document.GetAllocator());
+		}
+		json_document.AddMember("Colors", document_entries, json_document.GetAllocator());
+	}
+
+	std::filesystem::path fpath(mOutputPath);
+	fpath /= "ManufacturerColors.json";
+	fpath.make_preferred();
+
+	if (!std::filesystem::exists(fpath))
+	{
+		std::ofstream ostream(fpath);
+		rapidjson::OStreamWrapper osw(ostream);
+
+		rapidjson::PrettyWriter<rapidjson::OStreamWrapper, rapidjson::UTF8<>> writer(osw);
+		writer.SetIndent(' ', 4);
+		if (json_document.Accept(writer))
+		{
+			ostream.close();
+			writer.Flush();
+		}
+	}
+}
+
+std::string DCCManager::GetHexHash(int value)
+{
+	std::stringstream result;
+	result << std::uppercase << std::hex << value;
+
+	return std::string(result.str());
+}
+
+rapidjson::Value DCCManager::GetShaderParametersArray(std::shared_ptr<fmnext::BundleReader::BundleData> bundle, rapidjson::Document::AllocatorType& allocator)
+{
+	rapidjson::Value array(rapidjson::kArrayType);
+
+	for (auto it = bundle->ShaderParameters.begin(); it != bundle->ShaderParameters.end(); ++it) {
+		uint32_t itx = static_cast<uint32_t>(std::distance(bundle->ShaderParameters.begin(), it));
+
+		switch (it->type) {
+		case fmnext::ShaderParameter_Vector: {
+			auto result = std::any_cast<DirectX::XMFLOAT4>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value jsonArray(rapidjson::kArrayType);
+			jsonArray.PushBack(result.x, allocator);
+			jsonArray.PushBack(result.y, allocator);
+			jsonArray.PushBack(result.z, allocator);
+			jsonArray.PushBack(result.w, allocator);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Vector", allocator);
+			object.AddMember("Data", jsonArray, allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Color: {
+			auto result = std::any_cast<DirectX::XMFLOAT4>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value jsonArray(rapidjson::kArrayType);
+			jsonArray.PushBack(result.x, allocator);
+			jsonArray.PushBack(result.y, allocator);
+			jsonArray.PushBack(result.z, allocator);
+			jsonArray.PushBack(result.w, allocator);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+			
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Color", allocator);
+			object.AddMember("Data", jsonArray, allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Float: {
+			auto result = std::any_cast<float>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Float", allocator);
+			object.AddMember("Data", result, allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Bool: {
+			auto result = std::any_cast<bool>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Bool", allocator);
+			object.AddMember("Data", result, allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Int:
+		{
+			auto result = std::any_cast<int32_t>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Int", allocator);
+			object.AddMember("Data", result, allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Swizzle: {
+			auto result = std::any_cast<std::array<uint8_t, 16>>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Swizzle", allocator);
+			object.AddMember("Data", "No suitable data parser defined.", allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Texture2D: {
+			auto result = std::any_cast<std::string>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Texture2D", allocator);
+			object.AddMember("Data", StringToValue(result, allocator), allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Vector2:
+		{
+			auto result = std::any_cast<DirectX::XMFLOAT2>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value jsonArray(rapidjson::kArrayType);
+			jsonArray.PushBack(result.x, allocator);
+			jsonArray.PushBack(result.y, allocator);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Vector2", allocator);
+			object.AddMember("Data", jsonArray, allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Sampler:
+		case fmnext::ShaderParameter_ColorGradient:
+		case fmnext::ShaderParameter_FunctionRange:
+			break;
+		}
+	};
+
+	return array;
 }
