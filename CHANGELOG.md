@@ -6,6 +6,15 @@ Release available for download on [GitHub](https://github.com/fmnext/cli/release
 
 ## Release History
 
+### Jun 08, 2026 (Release 12)
+* fixed thumbnail exporter
+* added manufacturer colors exporter
+* removed unnecessary declaration
+* fixed missing tireR reference
+
+### Jun 03, 2026 (Release 11)
+* Fixed missing normals on opt mesh
+
 ### May 28, 2026 (Release 10)
 * Fixed tire duplicated
 
