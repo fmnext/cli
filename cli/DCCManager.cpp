@@ -459,28 +459,10 @@ bool DCCManager::Init()
 	{
 		if (!m_records->Thumbnail.empty())
 		{
-			auto exportThumbnail = [&](std::string pFile)
-				{
-					std::filesystem::path lOutputPath(mOutputPath);
-					lOutputPath /= std::filesystem::path(pFile).filename();
-					lOutputPath.make_preferred();
-
-					if (m_thumbnail) {
-						auto texture_resolver = fmnext::TextureResolver(*m_thumbnail);
-						texture_resolver.SaveToPNGFile(lOutputPath.string());
-					}
-				};
-
-			for (auto& [name, path] : m_game->GetThumbnail(m_records->Thumbnail))
+			for (const auto& path : m_game->GetResourceContainer(m_records->Thumbnail))
 			{
-				std::smatch match_big{};
-				std::regex_search(name, match_big, std::regex("_Big.swatchbin", std::regex::icase));
-
-				if (std::filesystem::exists(path) && !match_big.empty())
+				for (const auto& name : fmnext::GameResolver::GetThumbnailNames(m_records->Thumbnail))
 				{
-					auto local_thumbnail = m_game->GetThumbnail(m_records->Thumbnail);
-
-					//auto thumbnail = m_game->GetThumbnail(m_records.value().Thumbnail.toStdString());
 					auto thumbnail_container = fmnext::ContainerReader(path.string());
 
 					std::vector<char> thumb_blob{};
@@ -488,40 +470,24 @@ bool DCCManager::Init()
 						auto thumb = fmnext::BundleReader(thumb_blob);
 						if (thumb.Init())
 						{
-							m_thumbnail = std::make_unique<fmnext::BundleReader::BundleData>(thumb.bundle);
-							exportThumbnail(std::filesystem::path(name).filename().replace_extension(".png").string());
+							auto l_thumbnail = std::make_unique<fmnext::BundleReader::BundleData>(thumb.bundle);
+
+							std::string lfilename(std::filesystem::path(name).stem().string());
+							lfilename += "_";
+							lfilename += path.stem().string();
+							lfilename += ".png";
+
+							ExportThumbnail(std::move(l_thumbnail), lfilename);
 						}
 
+						std::cout << "\t" << name << "\n";
 						std::cout << "\t" << m_records->Thumbnail << "\n";
 						std::cout << "\t" << path.string() << "\n";
 					}
 
-					continue;
+					std::cout << "\n";
 				}
-
-				if (std::filesystem::exists(path))
-				{
-					//auto thumbnail = m_game->GetThumbnail(m_records.value().Thumbnail.toStdString());
-					auto thumbnail_container = fmnext::ContainerReader(path.string());
-
-					std::vector<char> thumb_blob{};
-					if (thumbnail_container.findName(name, thumb_blob)) {
-						auto thumb = fmnext::BundleReader(thumb_blob);
-						if (thumb.Init())
-						{
-							m_thumbnail = std::make_unique<fmnext::BundleReader::BundleData>(thumb.bundle);
-							exportThumbnail(std::filesystem::path(name).filename().replace_extension(".png").string());
-						}
-
-						std::cout << "\t" << m_records->Thumbnail << "\n";
-						std::cout << "\t" << path.string() << "\n";
-					}
-				}
-
 			}
-
-
-			/**/
 		}
 	}
 
@@ -2138,3 +2104,17 @@ rapidjson::Value DCCManager::GetShaderParametersArray(std::shared_ptr<fmnext::Bu
 
 	return array;
 }
+
+
+void DCCManager::ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, std::string pFile)
+{
+	std::filesystem::path lOutputPath(mOutputPath);
+	lOutputPath /= std::filesystem::path(pFile).filename();
+	lOutputPath.make_preferred();
+
+	if (ptr && !std::filesystem::exists(lOutputPath))
+	{
+		auto texture_resolver = fmnext::TextureResolver(*ptr);
+		texture_resolver.SaveToPNGFile(lOutputPath.string());
+	}
+};

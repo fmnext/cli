@@ -24,10 +24,10 @@
 #define FT_TOOLKIT_MAJOR_VERSION 1
 #define FT_TOOLKIT_MINOR_VERSION 0
 #define FT_TOOLKIT_PATCH_VERSION 0
-#define FT_TOOLKIT_BUILD_NUMBER  10
+#define FT_TOOLKIT_BUILD_NUMBER  12
 #define FT_TOOLKIT_SCM_BRANCH    "branch-1.0"
-#define FT_TOOLKIT_SCM_TAGS      "release version-10"
-#define FT_TOOLKIT_SCM_DATETIME  "2026-05-30T00:00:00.000Z"
+#define FT_TOOLKIT_SCM_TAGS      "release version-12"
+#define FT_TOOLKIT_SCM_DATETIME  "2026-06-08T00:00:00.000Z"
 
 namespace fmnext
 {
@@ -984,7 +984,12 @@ private:
     }
     
     rapidjson::Value StringToValue(const std::string& value, rapidjson::Document::AllocatorType& allocator);
+
     std::string GetHexHash(int value);
+
     rapidjson::Value GetShaderParametersArray(std::shared_ptr<fmnext::BundleReader::BundleData> bundle, rapidjson::Document::AllocatorType& allocator);
+
     void ExportManufacturerColors();
+
+    void ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, std::string pFile);
 };
