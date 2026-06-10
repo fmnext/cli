@@ -16,6 +16,7 @@
 #include <rapidjson/ostreamwrapper.h>
 #include <rapidjson/prettywriter.h>
 
+#include <boost/format.hpp>
 #ifdef IOS_REF
 #undef  IOS_REF
 #define IOS_REF (*(pManager->GetIOSettings()))

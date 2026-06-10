@@ -339,7 +339,7 @@ bool DCCManager::Init()
 					auto bundle = SetBundleData(model);
 
 					if (bundle) {
-						std::string scheme = "";
+						std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % id % fmnext::SceneReader::PartsToString(part.type) % model->type);
 						auto materials = HandleShaders(model, bundle, scheme);
 
 						list_items.emplace_back(upgrade_item->id, model, bundle, materials, scheme, static_cast<uint32_t>(part.type));
@@ -370,7 +370,8 @@ bool DCCManager::Init()
 			auto bundle = SetBundleData(model);
 
 			if (bundle) {
-				std::string scheme = "";
+				
+				std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % upgrade_id % fmnext::SceneReader::PartsToString(part.type) % model->type);
 				auto materials = HandleShaders(model, bundle, scheme);
 
 				list_items.emplace_back(upgrade_id, model, bundle, materials, scheme, static_cast<uint32_t>(part.type));
@@ -414,7 +415,7 @@ bool DCCManager::Init()
 
 						if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_model->path; }) == std::end(list_items))
 						{
-							std::string scheme = "";
+							std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % upgrade_id % fmnext::SceneReader::PartsToString(static_cast<fmnext::CCarParts_Enum>(8)) % tire_model->type);
 							auto materials = HandleShaders(tire_model, data, scheme);
 
 							list_items.emplace_back(upgrade_id, tire_model, data, materials, scheme, 8);
@@ -432,7 +433,7 @@ bool DCCManager::Init()
 
 							if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_model->path; }) == std::end(list_items))
 							{
-								std::string scheme = "";
+								std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % upgrade_id % fmnext::SceneReader::PartsToString(static_cast<fmnext::CCarParts_Enum>(8)) % tire_model->type);
 								auto materials = HandleShaders(tire_model, data, scheme);
 
 								list_items.emplace_back(upgrade_id, tire_model, data, materials, scheme, 8);
