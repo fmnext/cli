@@ -1834,8 +1834,24 @@ void DCCManager::ExportManufacturerColors()
 				size_t idx = std::distance(it->begin(), colors);
 
 				rapidjson::Value color_object(rapidjson::kObjectType);
-
 				color_object.AddMember("Index_Mask", colors->material_index_mask.value(), json_document.GetAllocator());
+
+				if (colors->masks.has_value())
+				{
+					rapidjson::Value mask_array(rapidjson::kArrayType);
+
+					for (const auto& mask : colors->masks.value())
+					{
+						mask_array.PushBack(StringToValue(mask, json_document.GetAllocator()), json_document.GetAllocator());
+					}
+
+					color_object.AddMember("Masks", mask_array, json_document.GetAllocator());
+				} 
+				else 
+				{
+					color_object.AddMember("Masks", rapidjson::Value(rapidjson::kNullType), json_document.GetAllocator());
+				}
+
 				color_object.AddMember("Path", StringToValue(colors->path, json_document.GetAllocator()), json_document.GetAllocator());
 
 				rapidjson::Value preview_color(rapidjson::kArrayType);
