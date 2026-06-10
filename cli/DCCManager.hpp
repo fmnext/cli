@@ -17,6 +17,7 @@
 #include <rapidjson/prettywriter.h>
 
 #include <boost/format.hpp>
+
 #ifdef IOS_REF
 #undef  IOS_REF
 #define IOS_REF (*(pManager->GetIOSettings()))
@@ -79,6 +80,7 @@ private:
     std::filesystem::path mInputPath{};
     std::filesystem::path mOutputPath{};
     std::filesystem::path mTextureOutputPath{};
+    std::filesystem::path mMaterialOutputPath{};
     std::filesystem::path mUIOutputPath{};
     std::filesystem::path mUITexturesOutputPath{};
 
@@ -266,6 +268,20 @@ private:
         if (!std::filesystem::exists(mUITexturesOutputPath))
         {
             return std::filesystem::create_directory(mUITexturesOutputPath);
+        }
+
+        return false;
+    }
+
+    bool SetupOutputMaterials()
+    {
+        mMaterialOutputPath = std::filesystem::path(mOutputPath);
+        mMaterialOutputPath /= "Materials";
+        mMaterialOutputPath.make_preferred();
+
+        if (!std::filesystem::exists(mMaterialOutputPath))
+        {
+            return std::filesystem::create_directory(mMaterialOutputPath);
         }
 
         return false;
@@ -993,4 +1009,6 @@ private:
     void ExportManufacturerColors();
 
     void ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, std::string pFile);
+
+    void ExportMaterialData(int bundle_index, const std::string& path);
 };

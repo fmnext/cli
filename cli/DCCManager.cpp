@@ -334,8 +334,6 @@ bool DCCManager::Init()
 			{
 				if (auto upgrade_item = std::find_if(std::begin(part.upgrade_models), std::end(part.upgrade_models), [&](const auto& data) { return data.id == id; }); upgrade_item != std::end(part.upgrade_models))
 				{
-					//QString scheme = QString("%0/%1/%2").arg(std::to_string(id).c_str(), root_item->data(0, Qt::DisplayRole).toString(), model->type.c_str());
-
 					auto bundle = SetBundleData(model);
 
 					if (bundle) {
@@ -344,7 +342,6 @@ bool DCCManager::Init()
 
 						list_items.emplace_back(upgrade_item->id, model, bundle, materials, scheme, static_cast<uint32_t>(part.type));
 					}
-
 				}
 			}
 		}
@@ -453,6 +450,7 @@ bool DCCManager::Init()
 
 	SetupOutpuDirectory();
 	SetupOutputTextures();
+	SetupOutputMaterials();
 
 	FBXSDK_printf("\n");
 	std::cout << "Thumbnail" << "\n";
@@ -701,6 +699,15 @@ bool DCCManager::Init()
 	}
 	else {
 		FBXSDK_printf("\tNot available.\n");
+	}
+
+	if (true) // arg --materials 1 ??
+	{
+		for (auto it = list_items.begin(); it != list_items.end(); ++it)
+		{
+			uint32_t index = static_cast<uint32_t>(std::distance(list_items.begin(), it));
+			ExportMaterialData(index, std::filesystem::path(it->model->path).filename().string());
+		}
 	}
 
 	//FbxAxisSystem SceneAxisSystem = mScene->GetGlobalSettings().GetAxisSystem();
@@ -2116,7 +2123,6 @@ rapidjson::Value DCCManager::GetShaderParametersArray(std::shared_ptr<fmnext::Bu
 	return array;
 }
 
-
 void DCCManager::ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, std::string pFile)
 {
 	std::filesystem::path lOutputPath(mOutputPath);
@@ -2139,4 +2145,92 @@ void DCCManager::ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleDat
 		auto texture_resolver = fmnext::TextureResolver(*ptr);
 		texture_resolver.SaveToPNGFile(lOutputPath.string());
 	}
-};
+}
+
+void DCCManager::ExportMaterialData(int bundle_index, const std::string& pFile)
+{
+	rapidjson::Document json_document{};
+	json_document.SetObject();
+
+	rapidjson::Value metadata_object(rapidjson::kObjectType);
+	metadata_object.AddMember("version", 1, json_document.GetAllocator());
+	metadata_object.AddMember("type", "MaterialData", json_document.GetAllocator());
+	metadata_object.AddMember("generator", "ForzaTech CLI Toolkit", json_document.GetAllocator());
+
+	json_document.AddMember("metadata", metadata_object, json_document.GetAllocator());
+
+	json_document.AddMember("Bundle", StringToValue(list_items[bundle_index].model->path, json_document.GetAllocator()), json_document.GetAllocator());
+	json_document.AddMember("Schema", StringToValue(list_items[bundle_index].schema, json_document.GetAllocator()), json_document.GetAllocator());
+	json_document.AddMember("Version", list_items[bundle_index].model->version, json_document.GetAllocator());
+	json_document.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(list_items[bundle_index].model->guid_v13)), json_document.GetAllocator()), json_document.GetAllocator());
+
+	rapidjson::Value document_entries(rapidjson::kArrayType);
+
+	for (auto it = list_items[bundle_index].bundle->Meshes.begin(); it != list_items[bundle_index].bundle->Meshes.end(); ++it)
+	{
+		auto materials = list_items[bundle_index];
+
+		auto result = std::find_if(list_items[bundle_index].materials.begin(), list_items[bundle_index].materials.end(), [&](auto& data) {
+			return data.first == it->mesh.material_id.value();
+			});
+
+		//int mesh_index = std::distance(list_items[bundle_index].bundle->Meshes.begin(), it);
+
+		auto material_instance = std::find_if(list_items[bundle_index].bundle->MaterialInstanceBundles.begin(), list_items[bundle_index].bundle->MaterialInstanceBundles.end(), [&](auto& data) {
+			return std::any_cast<int32_t>(data.metadata["Id"]) == it->mesh.material_id;
+			});
+
+		if (result != list_items[bundle_index].materials.end()) {
+
+			auto& [index, bundle_ptr] = *result;
+
+			//qDebug() << "mesh:" << QString("%0/%1_%2").arg(list_items[bundle_index].scheme.c_str(), std::any_cast<std::string>(it->metadata["Name"]).c_str()).arg(mesh_index);
+
+			if (material_instance != list_items[bundle_index].bundle->MaterialInstanceBundles.end()) {
+				//qDebug() << "instance:" << std::any_cast<std::string>(material_instance->metadata["Name"]);
+			}
+
+			rapidjson::Value json_object(rapidjson::kObjectType);
+
+			rapidjson::Value json_matloc_array = GetShaderParametersArray(materials.materials.find(index)->second.local, json_document.GetAllocator());
+			rapidjson::Value json_matins_array = GetShaderParametersArray(materials.materials.find(index)->second.instace, json_document.GetAllocator());
+
+			//json_object.insert("Mesh", QString("%0/%1_%2").arg(list_items[bundle_index].scheme.c_str(), std::any_cast<std::string>(it->metadata["Name"]).c_str()).arg(mesh_index));
+			json_object.AddMember("Mesh", StringToValue(std::any_cast<std::string>(it->metadata["Name"]), json_document.GetAllocator()), json_document.GetAllocator());
+
+			if (material_instance != list_items[bundle_index].bundle->MaterialInstanceBundles.end()) {
+				json_object.AddMember("Name", StringToValue(std::any_cast<std::string>(material_instance->metadata["Name"]), json_document.GetAllocator()), json_document.GetAllocator());
+			}
+
+			json_object.AddMember("Material", StringToValue(bundle_ptr.path, json_document.GetAllocator()), json_document.GetAllocator());
+			json_object.AddMember("Shader", StringToValue(bundle_ptr.instace->MaterialInstances[0], json_document.GetAllocator()), json_document.GetAllocator());
+			json_object.AddMember("Local", json_matloc_array, json_document.GetAllocator());
+			json_object.AddMember("Instance", json_matins_array, json_document.GetAllocator());
+			json_object.AddMember("Id", it->mesh.material_id.value(), json_document.GetAllocator());
+
+			document_entries.PushBack(json_object, json_document.GetAllocator());
+		}
+	}
+
+	json_document.AddMember("Materials", document_entries, json_document.GetAllocator());
+
+	std::filesystem::path fpath(mMaterialOutputPath);
+	fpath /= std::filesystem::path(pFile).replace_extension(".json");
+	fpath.make_preferred();
+
+	std::filesystem::path filePath = DCCManager::DeduplicatePath(fpath.string());
+
+	if (!std::filesystem::exists(filePath))
+	{
+		std::ofstream ostream(filePath);
+		rapidjson::OStreamWrapper osw(ostream);
+
+		rapidjson::PrettyWriter<rapidjson::OStreamWrapper, rapidjson::UTF8<>> writer(osw);
+		writer.SetIndent(' ', 4);
+		if (json_document.Accept(writer))
+		{
+			ostream.close();
+			writer.Flush();
+		}
+	}
+}
