@@ -472,13 +472,7 @@ bool DCCManager::Init()
 						if (thumb.Init())
 						{
 							auto l_thumbnail = std::make_unique<fmnext::BundleReader::BundleData>(thumb.bundle);
-
-							std::string lfilename(std::filesystem::path(name).stem().string());
-							lfilename += "_";
-							lfilename += path.stem().string();
-							lfilename += ".png";
-
-							ExportThumbnail(std::move(l_thumbnail), lfilename);
+							ExportThumbnail(std::move(l_thumbnail), name);
 						}
 
 						std::cout << "\t" << name << "\n";
@@ -2126,7 +2120,18 @@ rapidjson::Value DCCManager::GetShaderParametersArray(std::shared_ptr<fmnext::Bu
 void DCCManager::ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, std::string pFile)
 {
 	std::filesystem::path lOutputPath(mOutputPath);
-	lOutputPath /= std::filesystem::path(pFile).filename();
+	std::string filename{};
+	if (const auto& texture = ptr->Textures.begin(); texture != ptr->Textures.end())
+	{
+		filename += std::filesystem::path(pFile).filename().stem().string();
+		filename += "_";
+		filename += std::to_string(texture->header.width);
+		filename += "x";
+		filename += std::to_string(texture->header.height);
+		filename += ".png";
+	}
+
+	lOutputPath /= std::filesystem::path(filename);
 	lOutputPath.make_preferred();
 
 	if (ptr && !std::filesystem::exists(lOutputPath))
