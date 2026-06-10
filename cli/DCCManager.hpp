@@ -26,10 +26,10 @@
 #define FT_TOOLKIT_MAJOR_VERSION 1
 #define FT_TOOLKIT_MINOR_VERSION 0
 #define FT_TOOLKIT_PATCH_VERSION 0
-#define FT_TOOLKIT_BUILD_NUMBER  12
+#define FT_TOOLKIT_BUILD_NUMBER  13
 #define FT_TOOLKIT_SCM_BRANCH    "branch-1.0"
-#define FT_TOOLKIT_SCM_TAGS      "release version-12"
-#define FT_TOOLKIT_SCM_DATETIME  "2026-06-08T00:00:00.000Z"
+#define FT_TOOLKIT_SCM_TAGS      "release version-13"
+#define FT_TOOLKIT_SCM_DATETIME  "2026-06-10T00:00:00.000Z"
 
 namespace fmnext
 {
