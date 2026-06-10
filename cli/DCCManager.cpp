@@ -2123,7 +2123,7 @@ rapidjson::Value DCCManager::GetShaderParametersArray(std::shared_ptr<fmnext::Bu
 	return array;
 }
 
-void DCCManager::ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, std::string pFile)
+void DCCManager::ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, const std::string& pFile)
 {
 	std::filesystem::path lOutputPath(mOutputPath);
 	std::string filename{};

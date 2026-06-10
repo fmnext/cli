@@ -1008,7 +1008,7 @@ private:
 
     void ExportManufacturerColors();
 
-    void ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, std::string pFile);
+    void ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, const std::string& pFile);
 
     void ExportMaterialData(int bundle_index, const std::string& path);
 };
