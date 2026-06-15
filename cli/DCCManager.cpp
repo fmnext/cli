@@ -1010,7 +1010,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 									FbxNode* mesh_obj = nullptr;
 									FbxSurfaceLambert* material_obj = nullptr;
 
-									std::string mesh_name{};
+									std::string mesh_name(mesh.name);
 
 									auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
 										return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
@@ -1018,11 +1018,9 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 
 									if (material != std::end(data.bundle->MaterialInstanceBundles))
 									{
-										mesh_name += mesh.name;
 										mesh_name += "_";
 										mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
 									}
-
 
 									if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
 									{
@@ -1062,7 +1060,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 								FbxNode* mesh_obj = nullptr;
 								FbxSurfaceLambert* material_obj = nullptr;
 
-								std::string mesh_name{};
+								std::string mesh_name(mesh.name);
 
 								auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
 									return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
@@ -1070,7 +1068,6 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 
 								if (material != std::end(data.bundle->MaterialInstanceBundles))
 								{
-									mesh_name += mesh.name;
 									mesh_name += "_";
 									mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
 								}
@@ -1120,7 +1117,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 								FbxNode* mesh_obj = nullptr;
 								FbxSurfaceLambert* material_obj = nullptr;
 
-								std::string mesh_name{};
+								std::string mesh_name(mesh.name);
 
 								auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
 									return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
@@ -1128,7 +1125,6 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 
 								if (material != std::end(data.bundle->MaterialInstanceBundles))
 								{
-									mesh_name += mesh.name;
 									mesh_name += "_";
 									mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
 								}
@@ -1166,7 +1162,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 							FbxNode* mesh_obj = nullptr;
 							FbxSurfaceLambert* material_obj = nullptr;
 
-							std::string mesh_name{};
+							std::string mesh_name(mesh.name);
 
 							auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
 								return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
@@ -1174,7 +1170,6 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 
 							if (material != std::end(data.bundle->MaterialInstanceBundles))
 							{
-								mesh_name += mesh.name;
 								mesh_name += "_";
 								mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
 							}
@@ -1217,7 +1212,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 							FbxNode* mesh_obj = nullptr;
 							FbxSurfaceLambert* material_obj = nullptr;
 
-							std::string mesh_name{};
+							std::string mesh_name(mesh.name);
 
 							auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
 								return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
@@ -1225,7 +1220,6 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 
 							if (material != std::end(data.bundle->MaterialInstanceBundles))
 							{
-								mesh_name += mesh.name;
 								mesh_name += "_";
 								mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
 							}
@@ -1298,7 +1292,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 							FbxNode* mesh_obj = nullptr;
 							FbxSurfaceLambert* material_obj = nullptr;
 
-							std::string mesh_name{};
+							std::string mesh_name(mesh.name);
 
 							auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
 								return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
@@ -1306,7 +1300,6 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 
 							if (material != std::end(data.bundle->MaterialInstanceBundles))
 							{
-								mesh_name += mesh.name;
 								mesh_name += "_";
 								mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
 							}
@@ -1357,7 +1350,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 							FbxNode* mesh_obj = nullptr;
 							FbxSurfaceLambert* material_obj = nullptr;
 
-							std::string mesh_name{};
+							std::string mesh_name(mesh.name);
 							std::string material_instance_name{};
 
 							auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
@@ -1366,7 +1359,6 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 
 							if (material != std::end(data.bundle->MaterialInstanceBundles))
 							{
-								mesh_name += mesh.name;
 								mesh_name += "_";
 								mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
 							}
