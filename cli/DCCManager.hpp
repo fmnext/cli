@@ -422,7 +422,7 @@ private:
 
     FbxMesh* RemoveIsolatedVertices(FbxMesh* pMesh);
     
-    FbxNode* CreateMesh(const std::vector<DirectX::XMFLOAT3>& vertices, const std::vector<uint32_t>& indices, const std::vector<DirectX::XMFLOAT3>& normals, const std::vector<std::vector<DirectX::XMFLOAT2>>& uvs, const std::string& Name, FbxSurfaceMaterial* material, bool useQuads);
+    FbxNode* CreateMesh(fmnext::Mesh* mesh, const std::string& Name, FbxSurfaceMaterial* material, bool useQuads);
 
     FbxSurfaceLambert* CreateMaterialfromMemory(const std::string& pName, const std::shared_ptr<fmnext::BundleReader::BundleData>& pMaterialBundle)
     {
@@ -658,7 +658,7 @@ private:
             FbxNode* mesh_obj = nullptr;
             FbxSurfaceLambert* material_obj = nullptr;
 
-            mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, "ProxyLOD", material_obj, static_cast<fmnext::GeometryType>(m_geo));
+            mesh_obj = CreateMesh(&mesh, "ProxyLOD", material_obj, static_cast<fmnext::GeometryType>(m_geo));
             SetNodeTransformation(mesh_obj, mesh.matrix);
 
             mRootNode->AddChild(mesh_obj);

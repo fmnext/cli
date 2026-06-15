@@ -1029,7 +1029,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 										material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
 									}
 
-									mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+									mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
 									SetNodeTransformation(mesh_obj, mesh.matrix);
 
 									locatorObj->AddChild(mesh_obj);
@@ -1079,7 +1079,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 									material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
 								}
 
-								mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+								mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
 								SetNodeTransformation(mesh_obj, mesh.matrix);
 
 								locatorObj->AddChild(mesh_obj);
@@ -1136,7 +1136,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 									material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
 								}
 
-								mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+								mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
 								SetNodeTransformation(mesh_obj, mesh.matrix);
 
 								locatorObj->AddChild(mesh_obj);
@@ -1181,7 +1181,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 								material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
 							}
 
-							mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
 							SetNodeTransformation(mesh_obj, mesh.matrix);
 
 							locatorObj->AddChild(mesh_obj);
@@ -1231,7 +1231,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 								material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
 							}
 
-							mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
 							SetNodeTransformation(mesh_obj, mesh.matrix);
 
 							locatorObj->AddChild(mesh_obj);
@@ -1311,7 +1311,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 								material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
 							}
 
-							mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
 							SetNodeTransformation(mesh_obj, mesh.matrix);
 
 							locatorObj->AddChild(mesh_obj);
@@ -1419,7 +1419,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 								}
 							}
 
-							mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
 							SetNodeTransformation(mesh_obj, mesh.matrix);
 
 
@@ -1624,13 +1624,13 @@ FbxMesh* DCCManager::RemoveIsolatedVertices(FbxMesh* prev_mesh)
 	return result;
 }
 
-FbxNode* DCCManager::CreateMesh(const std::vector<DirectX::XMFLOAT3>& vertices, const std::vector<uint32_t>& indices, const std::vector<DirectX::XMFLOAT3>& normals, const std::vector<std::vector<DirectX::XMFLOAT2>>& uvs, const std::string& Name, FbxSurfaceMaterial* material, bool useQuads)
+FbxNode* DCCManager::CreateMesh(fmnext::Mesh* mesh, const std::string& Name, FbxSurfaceMaterial* material, bool useQuads)
 {
 	FbxMesh* lMesh = FbxMesh::Create(mManager, "");
 
 	uint32_t geometry = (useQuads) ? 4 : 3;
-	uint32_t numVertices = static_cast<int>(vertices.size()); // verts
-	uint32_t numIndices = static_cast<int>(indices.size());
+	uint32_t numVertices = static_cast<int>(mesh->vertices.size()); // verts
+	uint32_t numIndices = static_cast<int>(mesh->indices.size());
 	uint32_t numPolygons = static_cast<int>(numIndices / geometry); // faces
 
 	// Create control points.
@@ -1639,7 +1639,7 @@ FbxNode* DCCManager::CreateMesh(const std::vector<DirectX::XMFLOAT3>& vertices, 
 
 	for (uint32_t i = 0; i < numVertices; ++i)
 	{
-		lControlPoints[i] = FbxVector4(vertices[i].x, vertices[i].z, vertices[i].y);
+		lControlPoints[i] = FbxVector4(mesh->vertices[i].x, mesh->vertices[i].z, mesh->vertices[i].y);
 	}
 
 	FbxGeometryElementNormal* lElementNormal = lMesh->CreateElementNormal();
@@ -1649,10 +1649,10 @@ FbxNode* DCCManager::CreateMesh(const std::vector<DirectX::XMFLOAT3>& vertices, 
 
 	for (uint32_t i = 0; i < numVertices; ++i)
 	{
-		lElementNormal->GetDirectArray().Add(FbxVector4(normals[i].x, normals[i].z, normals[i].y));
+		lElementNormal->GetDirectArray().Add(FbxVector4(mesh->normals[i].x, mesh->normals[i].z, mesh->normals[i].y));
 	}
 
-	for (uint32_t id = 0; id < static_cast<uint32_t>(uvs.size()) && !uvs[id].empty(); ++id)
+	for (uint32_t id = 0; id < static_cast<uint32_t>(mesh->uvs.size()) && !mesh->uvs[id].empty(); ++id)
 	{
 		// UVs Set {ID}
 		std::string uvSet = "UVChannel_";
@@ -1664,10 +1664,10 @@ FbxNode* DCCManager::CreateMesh(const std::vector<DirectX::XMFLOAT3>& vertices, 
 
 		for (uint32_t i = 0; i < numIndices; i += geometry)
 		{
-			uint32_t v0 = indices[i + 0];
-			uint32_t v1 = (geometry == 4) ? indices[i + 2] : indices[i + 1];
-			uint32_t v2 = (geometry == 4) ? indices[i + 1] : indices[i + 2];
-			uint32_t v3 = (geometry == 4) ? indices[i + 3] : 0xffffffff;
+			uint32_t v0 = mesh->indices[i + 0];
+			uint32_t v1 = (geometry == 4) ? mesh->indices[i + 2] : mesh->indices[i + 1];
+			uint32_t v2 = (geometry == 4) ? mesh->indices[i + 1] : mesh->indices[i + 2];
+			uint32_t v3 = (geometry == 4) ? mesh->indices[i + 3] : 0xffffffff;
 
 			meshUV->GetIndexArray().Add(v0);
 			meshUV->GetIndexArray().Add(v2);
@@ -1678,9 +1678,9 @@ FbxNode* DCCManager::CreateMesh(const std::vector<DirectX::XMFLOAT3>& vertices, 
 			}
 		}
 
-		for (uint32_t i = 0; i < static_cast<uint32_t>(uvs[id].size()); ++i)
+		for (uint32_t i = 0; i < static_cast<uint32_t>(mesh->uvs[id].size()); ++i)
 		{
-			meshUV->GetDirectArray().Add(FbxVector2(uvs[id][i].x, 1 - uvs[id][i].y));
+			meshUV->GetDirectArray().Add(FbxVector2(mesh->uvs[id][i].x, 1 - mesh->uvs[id][i].y));
 		}
 	}
 
@@ -1689,10 +1689,10 @@ FbxNode* DCCManager::CreateMesh(const std::vector<DirectX::XMFLOAT3>& vertices, 
 	{
 		lMesh->BeginPolygon(-1, -1, false);
 		{
-			uint32_t v0 = indices[i + 0];
-			uint32_t v1 = (geometry == 4) ? indices[i + 1] : indices[i + 2];
-			uint32_t v2 = (geometry == 4) ? indices[i + 2] : indices[i + 1];
-			uint32_t v3 = (geometry == 4) ? indices[i + 3] : 0xffffffff;
+			uint32_t v0 = mesh->indices[i + 0];
+			uint32_t v1 = (geometry == 4) ? mesh->indices[i + 1] : mesh->indices[i + 2];
+			uint32_t v2 = (geometry == 4) ? mesh->indices[i + 2] : mesh->indices[i + 1];
+			uint32_t v3 = (geometry == 4) ? mesh->indices[i + 3] : 0xffffffff;
 
 			lMesh->AddPolygon(v0);
 			lMesh->AddPolygon(v1);
