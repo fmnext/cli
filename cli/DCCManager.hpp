@@ -55,13 +55,20 @@ namespace fmnext
         std::string schema;
         uint32_t type;
     };
+
+    enum ResourceType
+    {
+        NONE,
+        SCENE,
+        BUNDLE
+    };
 }
 
 class DCCManager
 {
 public:
     DCCManager() = default;
-    DCCManager(const std::string& iPath, const std::string& oPath, uint32_t lod = 0, uint32_t geo = 0, uint32_t opt = 0) : mInputPath(iPath), mOutputPath(oPath), m_lod(lod), m_geo(geo), m_opt(opt) {
+    DCCManager(const std::string& iPath, const std::string& oPath, uint32_t lod = 0, uint32_t geo = 0, uint32_t opt = 0, fmnext::ResourceType res = fmnext::ResourceType::NONE) : mInputPath(iPath), mOutputPath(oPath), m_lod(lod), m_geo(geo), m_opt(opt), m_res(res) {
     };
 
 	~DCCManager() = default;
@@ -85,6 +92,8 @@ private:
     std::filesystem::path mUITexturesOutputPath{};
 
     uint32_t m_lod = 0, m_geo = 0, m_opt = 0;
+
+    fmnext::ResourceType m_res;
 
     std::vector<fmnext::ModelItem> list_items;
 
@@ -405,7 +414,7 @@ private:
         return DirectX::XMFLOAT3();
     }
 
-    void SetNodeTransformation(FbxNode* pNode, DirectX::XMMATRIX pXMMatrix)
+    void SetNodeTransformation(FbxNode* pNode, const DirectX::XMMATRIX& pXMMatrix)
     {
         DirectX::XMVECTOR outScale, outRotQuat, outTrans;
         DirectX::XMMatrixDecompose(&outScale, &outRotQuat, &outTrans, pXMMatrix);
@@ -422,7 +431,7 @@ private:
 
     FbxMesh* RemoveIsolatedVertices(FbxMesh* pMesh);
     
-    FbxNode* CreateMesh(fmnext::Mesh* mesh, const std::string& Name, FbxSurfaceMaterial* material, bool useQuads);
+    FbxNode* CreateMesh(const fmnext::Mesh* mesh, const std::string& Name, FbxSurfaceMaterial* material, bool useQuads);
 
     FbxSurfaceLambert* CreateMaterialfromMemory(const std::string& pName, const std::shared_ptr<fmnext::BundleReader::BundleData>& pMaterialBundle)
     {
@@ -1011,4 +1020,7 @@ private:
     void ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, const std::string& pFile);
 
     void ExportMaterialData(int bundle_index, const std::string& path);
+
+    bool HandleScene();
+    bool HandleBundle();
 };

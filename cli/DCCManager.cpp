@@ -12,724 +12,16 @@ bool DCCManager::Init()
 
 	mRootNode = mScene->GetRootNode();
 
-	m_container = fmnext::ContainerReader(mInputPath.string());
-	m_game = std::make_unique<fmnext::GameResolver>(mInputPath.string());
-
-	std::vector<char> buffer{};
-	if (m_container.findName(std::filesystem::path(mInputPath).filename().replace_extension(std::string(".carbin")).string(), buffer)) {
-		auto reader = fmnext::SceneReader(buffer, fmnext::Series::Auto);
-		if (reader.Init()) {
-			m_scene = std::make_unique<fmnext::SceneReader::Scene>(reader.scene);
-		}
-	}
-
-	if (m_scene != nullptr)
+	switch (m_res)
 	{
-		auto sqlm = fmnext::SQLManager(m_game->GetDatabase().string(), m_scene->media_name);
-		m_records = sqlm.GetQuery();
-
-		if (m_records != nullptr)
-		{
-			auto tires_directory = m_game->GetSharedTires(m_records->TireModelName);
-			auto tires_container = fmnext::ContainerReader(tires_directory.string());
-			auto tires = tires_container.getMediaTireEntries();
-
-			for (auto& tire_bundle_name : tires) {
-				std::vector<char> tire_buffer{};
-				if (tires_container.findName(tire_bundle_name, tire_buffer)) {
-					auto reader = fmnext::BundleReader(tire_buffer);
-					if (reader.Init()) {
-						m_tires.try_emplace(tire_bundle_name, std::make_shared<fmnext::BundleReader::BundleData>(reader.bundle));
-					}
-				}
-			}
-		}
-		else
-		{
-			printf("\tRapidJSON %s\n", RAPIDJSON_VERSION_STRING);
-
-			std::filesystem::path fallback_file = std::filesystem::current_path();
-			fallback_file /= "fallback.json";
-			fallback_file.make_preferred();
-
-			std::ifstream ifs(fallback_file);
-			rapidjson::IStreamWrapper isw(ifs);
-			if (ifs.is_open())
-			{
-				rapidjson::Document document{};
-				document.ParseStream(isw);
-
-				if (document.HasMember("metadata") && document.HasMember("data"))
-				{
-					if (document["metadata"].HasMember("type") && document["metadata"]["type"] == "gameDB_Fallback")
-					{
-						m_records = std::make_shared<fmnext::DataBaseRecords>();
-
-						m_records->MediaName = m_scene->media_name; //document["data"]["Data_Car"]["MediaName"].GetString();
-						m_records->CarId = m_scene->ordinal; //document["data"]["Data_Car"]["CarId"].GetInt();
-						m_records->CarBodyID = m_scene->CarBodyID; //document["data"]["List_UpgradeCarBody"]["CarBodyID"].GetInt();
-						m_records->TireModelName = document["data"]["List_UpgradeTireCompound"]["TireModelName"].GetString();
-						m_records->FrontTireWidthMM = document["data"]["Data_Car"]["FrontTireWidthMM"].GetInt();
-						m_records->FrontTireAspect = document["data"]["Data_Car"]["FrontTireAspect"].GetInt();
-						m_records->FrontWheelDiameterIN = document["data"]["Data_Car"]["FrontWheelDiameterIN"].GetInt();
-						m_records->RearTireWidthMM = document["data"]["Data_Car"]["RearTireWidthMM"].GetInt();
-						m_records->RearTireAspect = document["data"]["Data_Car"]["RearTireAspect"].GetInt();
-						m_records->RearWheelDiameterIN = document["data"]["Data_Car"]["RearWheelDiameterIN"].GetInt();
-						m_records->Thumbnail = document["data"]["Data_Car"]["Thumbnail"].GetString();
-						m_records->ModelWheelbase = document["data"]["Data_CarBody"]["ModelWheelbase"].GetFloat();
-						m_records->ModelFrontTrackOuter = document["data"]["Data_CarBody"]["ModelFrontTrackOuter"].GetFloat();
-						m_records->ModelRearTrackOuter = document["data"]["Data_CarBody"]["ModelRearTrackOuter"].GetFloat();
-						m_records->ModelFrontStockRideHeight = document["data"]["Data_CarBody"]["ModelFrontStockRideHeight"].GetFloat();
-						m_records->ModelRearStockRideHeight = document["data"]["Data_CarBody"]["ModelRearStockRideHeight"].GetFloat();
-						m_records->BottomCenterWheelbasePosX = document["data"]["Data_CarBody"]["BottomCenterWheelbasePosX"].GetFloat();
-						m_records->BottomCenterWheelbasePosY = document["data"]["Data_CarBody"]["BottomCenterWheelbasePosY"].GetFloat();
-						m_records->BottomCenterWheelbasePosZ = document["data"]["Data_CarBody"]["BottomCenterWheelbasePosZ"].GetFloat();
-
-						auto tires_directory = m_game->GetSharedTires(m_records->TireModelName);
-						auto tires_container = fmnext::ContainerReader(tires_directory.string());
-						auto tires = tires_container.getMediaTireEntries();
-
-						for (auto& tire_bundle_name : tires) {
-							std::vector<char> tire_buffer{};
-							if (tires_container.findName(tire_bundle_name, tire_buffer)) {
-								auto reader = fmnext::BundleReader(tire_buffer);
-								if (reader.Init()) {
-									m_tires.try_emplace(tire_bundle_name, std::make_shared<fmnext::BundleReader::BundleData>(reader.bundle));
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-
-		{
-			std::vector<char> buffer{};
-			if (m_container.findName("BuildNumber.txt", buffer)) {
-				build_number = GetBuildNumber(buffer);
-			}
-		}
-
-		printf("\tlibzip %s\n", zip_libzip_version());
-		printf("\tGranny %s \n", GrannyGetVersionString());
-
-		FBXSDK_printf("\n");
-		FBXSDK_printf("Model Scene\n");
-
-		std::cout << "\tMedia Name: " << m_scene->media_name << "\n";
-		std::cout << "\tGUID: " << GetStringGUID(m_scene->build_guid) << "\n";
-		std::cout << "\tID: " << m_scene->ordinal << "\n";
-		std::cout << "\tSkeleton: " << m_scene->skeleton_modelbin_path << "\n";
-		std::cout << "\tSeries: " << m_game->GetSeriesName() << "\n";
-		std::cout << "\tBuild Number: " << build_number << "\n";
-
-		std::string lApplicationName = "ForzaTech CLI Toolkit v";
-		lApplicationName += GetVersionString();
-
-		// create scene info
-		FbxDocumentInfo* sceneInfo = FbxDocumentInfo::Create(mManager, "SceneInfo");
-		sceneInfo->mTitle = m_scene->media_name.c_str();
-		sceneInfo->mSubject = build_number.c_str();
-		sceneInfo->mAuthor = lApplicationName.c_str();
-		sceneInfo->mRevision = "rev. 1.0";
-		sceneInfo->mKeywords = "forza scene";
-		sceneInfo->mComment = "no particular comments required.";
-
-		sceneInfo->Original_ApplicationVersion = GetVersionString().c_str();
-		sceneInfo->Original_ApplicationName = "ForzaTech CLI Toolkit";
-		sceneInfo->Original_ApplicationVendor = "Apex";
-
-		// we need to add the sceneInfo before calling AddThumbNailToScene because
-		// that function is asking the scene for the sceneInfo.
-		mScene->SetSceneInfo(sceneInfo);
-		mScene->GetGlobalSettings().SetTimeMode(FbxTime::eFrames60);
-
-		if (GrannyVersionsMatch && m_CharacterFile == nullptr) {
-			std::string skeleton_location = "scene/";
-			skeleton_location += m_scene->media_name;
-			skeleton_location += "_skeleton.gr2";
-
-			std::vector<char> gr2_buffer{};
-			if (m_container.findName(skeleton_location, gr2_buffer)) {
-				SetSkeleton(gr2_buffer);
-			}
-		}
-		else {
-			GetSkeleton();
-		}
-
-		FBXSDK_printf("\n");
-		FBXSDK_printf("Animations\n");
-
-		if (GrannyVersionsMatch)
-		{
-			std::string state_machine = "animations/";
-			state_machine += m_scene->media_name;
-			state_machine += ".gsf";
-
-			std::vector<char> gsf_buffer{};
-			if (m_container.findName(state_machine, gsf_buffer))
-			{
-				InitStateMachine(gsf_buffer);
-
-				granny_file_info* GrannyModelInfo = GrannyGetFileInfo(m_CharacterFile);
-
-				for (auto& ref : references)
-				{
-					std::string motion_path = "game:\\media\\cars\\";
-					motion_path += m_scene->media_name;
-					motion_path += "\\animations\\";
-					motion_path += std::filesystem::path(ref.string()).filename().string();
-
-					std::cout << "\t" << motion_path << "\n";
-
-					std::vector<char> buffer{};
-					if (m_container.findName(fmnext::GameResolver::RemoveBase(motion_path, m_scene->media_name), buffer)) {
-						granny_file* GrannyFileAnim = GrannyReadEntireFileFromMemory(static_cast<granny_int32x>(buffer.size()), buffer.data());
-						granny_file_info* GrannyAnimInfo = GrannyGetFileInfo(GrannyFileAnim);
-
-						HandleAnimation(GrannyModelInfo->Skeletons[0], GrannyAnimInfo->Animations[0], std::filesystem::path(ref.string()).stem().string());
-						GrannyFreeFile(GrannyFileAnim);
-					}
-
-				}
-			}
-		}
-		else
-		{
-			printf("Warning: the Granny DLL currently loaded "
-				"doesn't match the .h file used during compilation\n");
-		}
-
-
-	}
-
-	SetSkeleton(m_scene->skeleton_modelbin_path);
-
-	if (m_CharacterFile == nullptr)
-	{
-		HandleSkeleton(m_skel->Skeleton);
-	}
-
-	{
-		FBXSDK_printf("\n");
-		FBXSDK_printf("Proxy LOD\n");
-
-		std::string proxyLOD = MakeCarRelativePath("Scene/ProxyLOD.modelbin");
-		SetProxyLOD(proxyLOD);
-
-		if (m_proxyLOD != nullptr)
-		{
-			HandleProxyLOD();
-			FBXSDK_printf("\t%s\n", proxyLOD.c_str());
-		}
-		else {
-			FBXSDK_printf("\tNone\n");
-		}
-	}
-
-	FBXSDK_printf("\n");
-	FBXSDK_printf("Materials\n");
-	FBXSDK_printf("\tProcessing...\n");
-
-	// media/_library and media/cars/_library
-	if (!m_game->GetBase().empty())
-	{
-		materials_container.push_back(fmnext::ContainerReader(m_game->GetPrimaryMaterialsLibrary().string()));
-		materials_container.push_back(fmnext::ContainerReader(m_game->GetMediaMaterialsLibrary().string()));
-	}
-
-	if (!m_game->GetBase().empty())
-	{
-		textures_container.push_back(fmnext::ContainerReader(m_game->GetPrimaryTexturesLibrary().string()));
-		textures_container.push_back(fmnext::ContainerReader(m_game->GetMediaTexturesLibrary().string()));
-	}
-
-	// media/cars/_library
-	if (!m_game->GetBase().empty())
-	{
-		auto sec_mat = m_game->GetSecondaryMaterialsLibrary();
-		auto sec_tex = m_game->GetSecondaryTexturesLibrary();
-
-		for (auto& mat_lib_entry : sec_mat)
-		{
-			std::string message;
-			message += "Secondary Material Library Found: ";
-			message += mat_lib_entry.string();
-			message += " \n";
-
-			materials_container.push_back(fmnext::ContainerReader(mat_lib_entry.string()));
-
-			//MGlobal::displayInfo(message.c_str());
-		}
-
-		for (auto& tex_lib_entry : sec_tex)
-		{
-			std::string message;
-			message += "Secondary Texture Library Found: ";
-			message += tex_lib_entry.string();
-			message += " \n";
-
-			textures_container.push_back(fmnext::ContainerReader(tex_lib_entry.string()));
-
-			//MGlobal::displayInfo(message.c_str());
-		}
-	}
-
-
-	for (const auto& upgradable_part : m_scene->upgradable_parts)
-	{
-		for (const auto& upgrade : upgradable_part.upgrade_models)
-		{
-			if (upgrade.car_body_id == -1)
-				continue;
-
-			if (auto item = std::find_if(car_bodies.begin(), car_bodies.end(), [&](auto& car_body) { return car_body.first == upgrade.id; }); item != std::end(car_bodies))
-			{
-				if (car_bodies[upgrade.car_body_id] != upgrade.parent_is_stock)
-				{
-					printf("Warning: CarBody %i is marked as both stock and non-stock. \n", upgrade.car_body_id);
-				}
-			}
-			else
-			{
-				car_bodies.emplace(upgrade.car_body_id, upgrade.parent_is_stock);
-			}
-		}
-	}
-
-	if (m_records)
-	{
-		car_upgrades.try_emplace(m_records->CarBodyID, true);
-	}
-
-	for (const auto& [id, parent_istock] : car_bodies) {
-		if (parent_istock) {
-			car_upgrades.try_emplace(id, true);
-		}
-	}
-
-
-	for (const auto& upgradable_part : m_scene->upgradable_parts)
-	{
-		for (const auto& upgrade : upgradable_part.upgrade_models)
-		{
-			if (auto item = std::find_if(car_upgrades.begin(), car_upgrades.end(), [&](auto& car_upgrade) { return car_upgrade.first == upgrade.id; }); item == std::end(car_upgrades))
-			{
-				if (auto result = std::find_if(std::begin(upgradable_part.shared_models), std::end(upgradable_part.shared_models), [&](const auto& data) { for (auto& upgrade_id : data.upgrade_ids) { return upgrade_id == upgrade.id; } return false;  }); result != std::end(upgradable_part.shared_models))
-				{
-					car_upgrades.emplace(upgrade.id, upgrade.is_stock);
-				}
-			}
-		}
-	}
-
-
-
-	for (const auto& part : m_scene->upgradable_parts)
-	{
-		for (auto& [upgrade_ids, model] : part.shared_models)
-		{
-			for (auto& id : upgrade_ids)
-			{
-				if (auto upgrade_item = std::find_if(std::begin(part.upgrade_models), std::end(part.upgrade_models), [&](const auto& data) { return data.id == id; }); upgrade_item != std::end(part.upgrade_models))
-				{
-					auto bundle = SetBundleData(model);
-
-					if (bundle) {
-						std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % id % fmnext::SceneReader::PartsToString(part.type) % model->type);
-						auto materials = HandleShaders(model, bundle, scheme);
-
-						list_items.emplace_back(upgrade_item->id, model, bundle, materials, scheme, static_cast<uint32_t>(part.type));
-					}
-				}
-			}
-		}
-
-	}
-
-	for (const auto& part : m_scene->non_upgradable_parts)
-	{
-		uint32_t upgrade_id = (m_records == nullptr) ? 0 : m_records->CarBodyID;
-		for (const auto& [id, parent_istock] : car_bodies) {
-			if (parent_istock) {
-				upgrade_id = id;
-			}
-		}
-
-		if (auto stock = std::find_if(car_upgrades.begin(), car_upgrades.end(), [&](auto val) { return val.second == true; }); stock != car_upgrades.end())
-		{
-			upgrade_id = stock->first;
-		}
-
-		for (const auto& model : part.models)
-		{
-			auto bundle = SetBundleData(model);
-
-			if (bundle) {
-				
-				std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % upgrade_id % fmnext::SceneReader::PartsToString(part.type) % model->type);
-				auto materials = HandleShaders(model, bundle, scheme);
-
-				list_items.emplace_back(upgrade_id, model, bundle, materials, scheme, static_cast<uint32_t>(part.type));
-			}
-
-		}
-
-		if (part.type == fmnext::CCarParts_WheelStyle && m_records && !m_tires.empty())
-		{
-			for (const auto& model : part.models)
-			{
-				std::shared_ptr<fmnext::SceneReader::CarRenderModel11> tire_model = std::make_shared<fmnext::SceneReader::CarRenderModel11>();
-				tire_model->bone_id = model->bone_id;
-				tire_model->bone_name = model->bone_name;
-				tire_model->id = model->id;
-				tire_model->levels_of_detail = model->levels_of_detail;
-				tire_model->draw_groups = model->draw_groups;
-				tire_model->transform = model->transform;
-				tire_model->version = model->version;
-				tire_model->type = "Tires";
-
-				std::string position("tire");
-				position += GetContainerDirection(model->bone_name);
-
-				//{ "tireL", "tireL", "tireL", "tireL" };     =  previous
-				//{ "tireL", "tireL", "tireR", "tireR" };     =  previous/current
-				//{ "tireLF", "tireLR", "tireRF", "tireRR" }; =  current/fixed
-
-				for (const auto& [key, data] : m_tires)
-				{
-					std::smatch match_tire{};
-					std::string regex = (m_tires.size() <= 2) ? std::string(position.begin(), position.end() - 1) : position;
-
-					switch (static_cast<uint32_t>(m_tires.size()))
-					{
-					case 0x01:
-					{
-						tire_model->path = "game:\\media\\cars\\_library\\scene\\tires\\";
-						tire_model->path += m_records->TireModelName;
-						tire_model->path += std::string(std::string("\\") + position + std::string(key.begin() + regex.size(), key.end()));
-
-						if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_model->path; }) == std::end(list_items))
-						{
-							std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % upgrade_id % fmnext::SceneReader::PartsToString(static_cast<fmnext::CCarParts_Enum>(8)) % tire_model->type);
-							auto materials = HandleShaders(tire_model, data, scheme);
-
-							list_items.emplace_back(upgrade_id, tire_model, data, materials, scheme, 8);
-						}
-						break;
-					}
-					case 0x02:
-					case 0x04:
-					{
-						if (std::regex_search(key, match_tire, std::regex(regex, std::regex::icase)))
-						{
-							tire_model->path = "game:\\media\\cars\\_library\\scene\\tires\\";
-							tire_model->path += m_records->TireModelName;
-							tire_model->path += std::string(std::string("\\") + position + std::string(key.begin() + regex.size(), key.end()));
-
-							if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_model->path; }) == std::end(list_items))
-							{
-								std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % upgrade_id % fmnext::SceneReader::PartsToString(static_cast<fmnext::CCarParts_Enum>(8)) % tire_model->type);
-								auto materials = HandleShaders(tire_model, data, scheme);
-
-								list_items.emplace_back(upgrade_id, tire_model, data, materials, scheme, 8);
-							}
-						}
-						break;
-					}
-					default:
-						printf("Warning: Unsupported number of tire entries found: 0x%02X \n", static_cast<uint32_t>(m_tires.size()));
-						break;
-					}
-				}
-			}
-		}
-
-	}
-
-	SetupOutpuDirectory();
-	SetupOutputTextures();
-	SetupOutputMaterials();
-
-	FBXSDK_printf("\n");
-	std::cout << "Thumbnail" << "\n";
-	if (m_records)
-	{
-		if (!m_records->Thumbnail.empty())
-		{
-			for (const auto& path : m_game->GetResourceContainer(m_records->Thumbnail))
-			{
-				for (const auto& name : fmnext::GameResolver::GetThumbnailNames(m_records->Thumbnail))
-				{
-					auto thumbnail_container = fmnext::ContainerReader(path.string());
-
-					std::vector<char> thumb_blob{};
-					if (thumbnail_container.findName(name, thumb_blob)) {
-						auto thumb = fmnext::BundleReader(thumb_blob);
-						if (thumb.Init())
-						{
-							auto l_thumbnail = std::make_unique<fmnext::BundleReader::BundleData>(thumb.bundle);
-							ExportThumbnail(std::move(l_thumbnail), name);
-						}
-
-						std::cout << "\t" << name << "\n";
-						std::cout << "\t" << m_records->Thumbnail << "\n";
-						std::cout << "\t" << path.string() << "\n";
-					}
-
-					std::cout << "\n";
-				}
-			}
-		}
-	}
-
-	if (m_records)
-	{
-		if (m_records->Thumbnail.empty())
-		{
-			std::cout << "\t" << "Not available in fallback." << "\n";
-		}
-	}
-
-	FBXSDK_printf("\n");
-	FBXSDK_printf("Textures\n");
-
-	if (true) // ?? arg --textures 1 ????? ?? 
-	{
-		for (auto& [path, filename] : texture_list)
-		{
-			auto library_blob = HandleLibrary(path);
-
-			if (!library_blob.empty())
-			{
-				auto texture_bundle = fmnext::BundleReader(library_blob);
-				if (texture_bundle.Init())
-				{
-					std::filesystem::path path_name(mTextureOutputPath);
-					path_name /= std::filesystem::path(filename).replace_extension(".dds").string();
-					path_name.make_preferred();
-
-					auto texture_resolver = fmnext::TextureResolver(texture_bundle.bundle);
-					texture_resolver.SaveToDDSFile(path_name.string());
-
-					std::cout << "\t" << path << "\n";
-				}
-
-			}
-		}
-
-
-		auto Textures = m_container.getMediaTextureEntries();
-
-		for (auto& [path, filename] : Textures)
-		{
-			std::vector<char> buffer{};
-			if (m_container.findName(path, buffer))
-			{
-				std::smatch match_result;
-				std::regex_search(path, match_result, std::regex("UI/Textures", std::regex_constants::icase));
-
-				if (!match_result.ready())
-				{
-					std::filesystem::path path_name(mTextureOutputPath);
-
-					path_name /= std::filesystem::path(filename).replace_extension(".dds").string();
-					path_name.make_preferred();
-
-					if (!std::filesystem::exists(path_name))
-					{
-						auto texture_bundle = fmnext::BundleReader(buffer);
-						if (texture_bundle.Init())
-						{
-							auto texture_resolver = fmnext::TextureResolver(texture_bundle.bundle);
-							texture_resolver.SaveToDDSFile(path_name.string());
-
-							std::cout << "\t" << MakeCarRelativePath(path) << "\n";
-						}
-					}
-				}
-				else {
-					std::filesystem::path path_name(mTextureOutputPath);
-
-					path_name /= std::filesystem::path(filename).replace_extension(".dds").string();
-					path_name.make_preferred();
-
-					auto texture_bundle = fmnext::BundleReader(buffer);
-					if (texture_bundle.Init())
-					{
-						auto texture_resolver = fmnext::TextureResolver(texture_bundle.bundle);
-						texture_resolver.SaveToDDSFile(path_name.string());
-						//texture_resolver.SaveToPNGFile(path_name.string());
-
-						std::cout << "\t" << MakeCarRelativePath(path) << "\n";
-					}
-				}
-			}
-
-			buffer.clear();
-		}
-	}
-
-	FBXSDK_printf("\n");
-	FBXSDK_printf("Digital Gauges\n");
-	{
-		std::string digitalGauge = "UI/";
-		digitalGauge += m_scene->media_name;
-		digitalGauge += ".xaml";
-
-		std::vector<char> buffer{};
-		if (m_container.findName(digitalGauge, buffer))
-		{
-			std::filesystem::path path_name(mOutputPath);
-			path_name /= std::filesystem::path(digitalGauge).filename().string();
-			path_name.make_preferred();
-
-			if (!std::filesystem::exists(path_name))
-			{
-				std::ofstream stream(path_name, std::ios::binary | std::ios::out);
-				if (stream.is_open())
-				{
-					stream.write(buffer.data(), buffer.size());
-					stream.close();
-
-					std::cout << "\t" << MakeCarRelativePath(digitalGauge) << "\n";
-				}
-			}
-
-			buffer.clear();
-		}
-		else {
-			std::cout << "\tNone\n";
-		}
-	}
-
-
-	FBXSDK_printf("\n");
-	FBXSDK_printf("Vehicle Upgrades\n");
-
-	for (auto& [upgrade, is_stock] : car_upgrades)
-	{
-		std::cout << "\t" << upgrade << "\n";
-	}
-
-	FBXSDK_printf("\n");
-	FBXSDK_printf("Manufacturer Colors\n");
-
-	m_colors = GetBundleData("ManufacturerColors.bin");
-
-	ExportManufacturerColors();
-
-	if (m_colors != nullptr) //!m_colors->ManufacturerColors.empty()
-	{
-		if (!m_colors->ManufacturerColors.empty())
-		{
-			int color_index = 0;
-
-			for (auto& color : m_colors->ManufacturerColors)
-			{
-				for (auto& inst : color)
-				{
-					// std::filesystem::path(inst.path).filename().stem().string()
-					// inst.path
-					// inst.preview_color.x, inst.preview_color.y, inst.preview_color.z
-
-					uint32_t RR = static_cast<uint32_t>(std::round(inst.preview_color.x * 255.0f));
-					uint32_t GG = static_cast<uint32_t>(std::round(inst.preview_color.y * 255.0f));
-					uint32_t BB = static_cast<uint32_t>(std::round(inst.preview_color.z * 255.0f));
-
-					std::cout << "\t";
-					std::cout << " #" << std::uppercase << std::hex << GetHexColor(RR, GG, BB) << "\n";
-
-					{
-						if (fmnext::GameResolver::Contains(inst.path, m_scene->media_name))
-						{
-							std::string path = fmnext::GameResolver::Remove(inst.path, m_scene->media_name).string();
-							std::replace(path.begin(), path.end(), '\\', '/');
-
-							std::vector<char> mcolor_blob{};
-							if (m_container.findName(path, mcolor_blob))
-							{
-								auto material = GetBundleData(mcolor_blob);
-								//auto material_shader = GetBundleData(material->MaterialInstances[0]);
-
-								for (auto& param : material->ShaderParameters)
-								{
-									if (param.type == fmnext::ShaderParameter_Texture2D)
-									{
-										std::string texture = std::any_cast<std::string>(param.value);
-										// std::filesystem::path(texture).filename().stem().string()
-									}
-
-								}
-
-							}
-						}
-						else
-						{
-							std::string path = m_game->Remove(inst.path).string();
-							std::replace(path.begin(), path.end(), '\\', '/');
-
-							std::vector<char> mcolor_blob = FindAssetInContainer(path);
-							if (!mcolor_blob.empty())
-							{
-								auto material = GetBundleData(mcolor_blob);
-								//auto material_shader = GetBundleData(material->MaterialInstances[0]);
-
-								for (auto& param : material->ShaderParameters)
-								{
-									if (param.type == fmnext::ShaderParameter_Texture2D)
-									{
-										std::string texture = std::any_cast<std::string>(param.value);
-										// std::filesystem::path(texture).filename().stem().string()
-									}
-
-								}
-							}
-						}
-
-
-					}
-				}
-
-				++color_index;
-			}
-
-		}
-	}
-	else {
-		FBXSDK_printf("\tNot available.\n");
-	}
-
-	if (true) // arg --materials 1 ??
-	{
-		for (auto it = list_items.begin(); it != list_items.end(); ++it)
-		{
-			uint32_t index = static_cast<uint32_t>(std::distance(list_items.begin(), it));
-			ExportMaterialData(index, std::filesystem::path(it->model->path).filename().string());
-		}
-	}
-
-	//FbxAxisSystem SceneAxisSystem = mScene->GetGlobalSettings().GetAxisSystem();
-
-	//FbxAxisSystem AxisSystem(FbxAxisSystem::eMax);
-	//FbxSystemUnit UnitSystem(FbxSystemUnit::mm);
-
-	//AxisSystem.ConvertScene(mScene);
-	//UnitSystem.ConvertScene(mScene);
-
-
-	//FbxAxisSystem::Max.DeepConvertScene(mScene);
-
-	FBXSDK_printf("\n");
-	//FBXSDK_printf("Meshes\n");
-
-	if (m_records)
-	{
-		Initialize(m_records);
-	}
-	else {
-		Initialize(nullptr);
+	case fmnext::NONE: // deflt
+		break;
+	case fmnext::SCENE:
+		HandleScene();
+		break;
+	case fmnext::BUNDLE:
+		HandleBundle();
+		break;
 	}
 
 	FBXSDK_printf("\n");
@@ -1005,7 +297,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 									locatorObj->SetName(wheel_name.c_str());
 								}
 
-								for (auto& mesh : resolver.GetMeshes())
+								for (const auto& mesh : resolver.GetMeshes())
 								{
 									FbxNode* mesh_obj = nullptr;
 									FbxSurfaceLambert* material_obj = nullptr;
@@ -1055,7 +347,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 								locatorObj->SetName(wheel_name.c_str());
 							}
 
-							for (auto& mesh : resolver.GetMeshes())
+							for (const auto& mesh : resolver.GetMeshes())
 							{
 								FbxNode* mesh_obj = nullptr;
 								FbxSurfaceLambert* material_obj = nullptr;
@@ -1112,7 +404,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 								locatorObj->SetName(tire_name.c_str());
 							}
 
-							for (auto& mesh : resolver.GetMeshes())
+							for (const auto& mesh : resolver.GetMeshes())
 							{
 								FbxNode* mesh_obj = nullptr;
 								FbxSurfaceLambert* material_obj = nullptr;
@@ -1157,7 +449,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 
 						auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo));
 
-						for (auto& mesh : resolver.GetMeshes())
+						for (const auto& mesh : resolver.GetMeshes())
 						{
 							FbxNode* mesh_obj = nullptr;
 							FbxSurfaceLambert* material_obj = nullptr;
@@ -1207,7 +499,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 
 						auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo));
 
-						for (auto& mesh : resolver.GetMeshes())
+						for (const auto& mesh : resolver.GetMeshes())
 						{
 							FbxNode* mesh_obj = nullptr;
 							FbxSurfaceLambert* material_obj = nullptr;
@@ -1287,7 +579,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 
 						auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo));
 
-						for (auto& mesh : resolver.GetMeshes())
+						for (const auto& mesh : resolver.GetMeshes())
 						{
 							FbxNode* mesh_obj = nullptr;
 							FbxSurfaceLambert* material_obj = nullptr;
@@ -1345,7 +637,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 							locatorObj->SetName(bundle_name.c_str());
 						}
 
-						for (auto& mesh : resolver.GetMeshes())
+						for (const auto& mesh : resolver.GetMeshes())
 						{
 							FbxNode* mesh_obj = nullptr;
 							FbxSurfaceLambert* material_obj = nullptr;
@@ -1436,7 +728,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 		}
 
 
-		for (auto& [key, obj] : suspensions)
+		for (const auto& [key, obj] : suspensions)
 		{
 			if (auto transform = suspension_transforms.find(key); transform != suspension_transforms.end())
 			{
@@ -1449,7 +741,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 			}
 		}
 
-		for (auto& [key, obj] : calipers)
+		for (const auto& [key, obj] : calipers)
 		{
 			std::string spindle_key = "spindle" + DCCManager::GetContainerDirection(key);
 
@@ -1624,7 +916,7 @@ FbxMesh* DCCManager::RemoveIsolatedVertices(FbxMesh* prev_mesh)
 	return result;
 }
 
-FbxNode* DCCManager::CreateMesh(fmnext::Mesh* mesh, const std::string& Name, FbxSurfaceMaterial* material, bool useQuads)
+FbxNode* DCCManager::CreateMesh(const fmnext::Mesh* mesh, const std::string& Name, FbxSurfaceMaterial* material, bool useQuads)
 {
 	FbxMesh* lMesh = FbxMesh::Create(mManager, "");
 
@@ -2225,4 +1517,770 @@ void DCCManager::ExportMaterialData(int bundle_index, const std::string& pFile)
 			writer.Flush();
 		}
 	}
+}
+
+bool DCCManager::HandleScene()
+{
+	m_container = fmnext::ContainerReader(mInputPath.string());
+	m_game = std::make_unique<fmnext::GameResolver>(mInputPath.string());
+
+	std::vector<char> buffer{};
+	if (m_container.findName(std::filesystem::path(mInputPath).filename().replace_extension(std::string(".carbin")).string(), buffer)) {
+		auto reader = fmnext::SceneReader(buffer, fmnext::Series::Auto);
+		if (reader.Init()) {
+			m_scene = std::make_unique<fmnext::SceneReader::Scene>(reader.scene);
+		}
+	}
+
+	if (m_scene != nullptr)
+	{
+		auto sqlm = fmnext::SQLManager(m_game->GetDatabase().string(), m_scene->media_name);
+		m_records = sqlm.GetQuery();
+
+		if (m_records != nullptr)
+		{
+			auto tires_directory = m_game->GetSharedTires(m_records->TireModelName);
+			auto tires_container = fmnext::ContainerReader(tires_directory.string());
+			auto tires = tires_container.getMediaTireEntries();
+
+			for (auto& tire_bundle_name : tires) {
+				std::vector<char> tire_buffer{};
+				if (tires_container.findName(tire_bundle_name, tire_buffer)) {
+					auto reader = fmnext::BundleReader(tire_buffer);
+					if (reader.Init()) {
+						m_tires.try_emplace(tire_bundle_name, std::make_shared<fmnext::BundleReader::BundleData>(reader.bundle));
+					}
+				}
+			}
+		}
+		else
+		{
+			printf("\tRapidJSON %s\n", RAPIDJSON_VERSION_STRING);
+
+			std::filesystem::path fallback_file = std::filesystem::current_path();
+			fallback_file /= "fallback.json";
+			fallback_file.make_preferred();
+
+			std::ifstream ifs(fallback_file);
+			rapidjson::IStreamWrapper isw(ifs);
+			if (ifs.is_open())
+			{
+				rapidjson::Document document{};
+				document.ParseStream(isw);
+
+				if (document.HasMember("metadata") && document.HasMember("data"))
+				{
+					if (document["metadata"].HasMember("type") && document["metadata"]["type"] == "gameDB_Fallback")
+					{
+						m_records = std::make_shared<fmnext::DataBaseRecords>();
+
+						m_records->MediaName = m_scene->media_name; //document["data"]["Data_Car"]["MediaName"].GetString();
+						m_records->CarId = m_scene->ordinal; //document["data"]["Data_Car"]["CarId"].GetInt();
+						m_records->CarBodyID = m_scene->CarBodyID; //document["data"]["List_UpgradeCarBody"]["CarBodyID"].GetInt();
+						m_records->TireModelName = document["data"]["List_UpgradeTireCompound"]["TireModelName"].GetString();
+						m_records->FrontTireWidthMM = document["data"]["Data_Car"]["FrontTireWidthMM"].GetInt();
+						m_records->FrontTireAspect = document["data"]["Data_Car"]["FrontTireAspect"].GetInt();
+						m_records->FrontWheelDiameterIN = document["data"]["Data_Car"]["FrontWheelDiameterIN"].GetInt();
+						m_records->RearTireWidthMM = document["data"]["Data_Car"]["RearTireWidthMM"].GetInt();
+						m_records->RearTireAspect = document["data"]["Data_Car"]["RearTireAspect"].GetInt();
+						m_records->RearWheelDiameterIN = document["data"]["Data_Car"]["RearWheelDiameterIN"].GetInt();
+						m_records->Thumbnail = document["data"]["Data_Car"]["Thumbnail"].GetString();
+						m_records->ModelWheelbase = document["data"]["Data_CarBody"]["ModelWheelbase"].GetFloat();
+						m_records->ModelFrontTrackOuter = document["data"]["Data_CarBody"]["ModelFrontTrackOuter"].GetFloat();
+						m_records->ModelRearTrackOuter = document["data"]["Data_CarBody"]["ModelRearTrackOuter"].GetFloat();
+						m_records->ModelFrontStockRideHeight = document["data"]["Data_CarBody"]["ModelFrontStockRideHeight"].GetFloat();
+						m_records->ModelRearStockRideHeight = document["data"]["Data_CarBody"]["ModelRearStockRideHeight"].GetFloat();
+						m_records->BottomCenterWheelbasePosX = document["data"]["Data_CarBody"]["BottomCenterWheelbasePosX"].GetFloat();
+						m_records->BottomCenterWheelbasePosY = document["data"]["Data_CarBody"]["BottomCenterWheelbasePosY"].GetFloat();
+						m_records->BottomCenterWheelbasePosZ = document["data"]["Data_CarBody"]["BottomCenterWheelbasePosZ"].GetFloat();
+
+						auto tires_directory = m_game->GetSharedTires(m_records->TireModelName);
+						auto tires_container = fmnext::ContainerReader(tires_directory.string());
+						auto tires = tires_container.getMediaTireEntries();
+
+						for (auto& tire_bundle_name : tires) {
+							std::vector<char> tire_buffer{};
+							if (tires_container.findName(tire_bundle_name, tire_buffer)) {
+								auto reader = fmnext::BundleReader(tire_buffer);
+								if (reader.Init()) {
+									m_tires.try_emplace(tire_bundle_name, std::make_shared<fmnext::BundleReader::BundleData>(reader.bundle));
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		{
+			std::vector<char> buffer{};
+			if (m_container.findName("BuildNumber.txt", buffer)) {
+				build_number = GetBuildNumber(buffer);
+			}
+		}
+
+		printf("\tlibzip %s\n", zip_libzip_version());
+		printf("\tGranny %s \n", GrannyGetVersionString());
+
+		FBXSDK_printf("\n");
+		FBXSDK_printf("Model Scene\n");
+
+		std::cout << "\tMedia Name: " << m_scene->media_name << "\n";
+		std::cout << "\tGUID: " << GetStringGUID(m_scene->build_guid) << "\n";
+		std::cout << "\tID: " << m_scene->ordinal << "\n";
+		std::cout << "\tSkeleton: " << m_scene->skeleton_modelbin_path << "\n";
+		std::cout << "\tSeries: " << m_game->GetSeriesName() << "\n";
+		std::cout << "\tBuild Number: " << build_number << "\n";
+
+		std::string lApplicationName = "ForzaTech CLI Toolkit v";
+		lApplicationName += GetVersionString();
+
+		// create scene info
+		FbxDocumentInfo* sceneInfo = FbxDocumentInfo::Create(mManager, "SceneInfo");
+		sceneInfo->mTitle = m_scene->media_name.c_str();
+		sceneInfo->mSubject = build_number.c_str();
+		sceneInfo->mAuthor = lApplicationName.c_str();
+		sceneInfo->mRevision = "rev. 1.0";
+		sceneInfo->mKeywords = "forza scene";
+		sceneInfo->mComment = "no particular comments required.";
+
+		sceneInfo->Original_ApplicationVersion = GetVersionString().c_str();
+		sceneInfo->Original_ApplicationName = "ForzaTech CLI Toolkit";
+		sceneInfo->Original_ApplicationVendor = "Apex";
+
+		// we need to add the sceneInfo before calling AddThumbNailToScene because
+		// that function is asking the scene for the sceneInfo.
+		mScene->SetSceneInfo(sceneInfo);
+		mScene->GetGlobalSettings().SetTimeMode(FbxTime::eFrames60);
+
+		if (GrannyVersionsMatch && m_CharacterFile == nullptr) {
+			std::string skeleton_location = "scene/";
+			skeleton_location += m_scene->media_name;
+			skeleton_location += "_skeleton.gr2";
+
+			std::vector<char> gr2_buffer{};
+			if (m_container.findName(skeleton_location, gr2_buffer)) {
+				SetSkeleton(gr2_buffer);
+			}
+		}
+		else {
+			GetSkeleton();
+		}
+
+		FBXSDK_printf("\n");
+		FBXSDK_printf("Animations\n");
+
+		if (GrannyVersionsMatch)
+		{
+			std::string state_machine = "animations/";
+			state_machine += m_scene->media_name;
+			state_machine += ".gsf";
+
+			std::vector<char> gsf_buffer{};
+			if (m_container.findName(state_machine, gsf_buffer))
+			{
+				InitStateMachine(gsf_buffer);
+
+				granny_file_info* GrannyModelInfo = GrannyGetFileInfo(m_CharacterFile);
+
+				for (auto& ref : references)
+				{
+					std::string motion_path = "game:\\media\\cars\\";
+					motion_path += m_scene->media_name;
+					motion_path += "\\animations\\";
+					motion_path += std::filesystem::path(ref.string()).filename().string();
+
+					std::cout << "\t" << motion_path << "\n";
+
+					std::vector<char> buffer{};
+					if (m_container.findName(fmnext::GameResolver::RemoveBase(motion_path, m_scene->media_name), buffer)) {
+						granny_file* GrannyFileAnim = GrannyReadEntireFileFromMemory(static_cast<granny_int32x>(buffer.size()), buffer.data());
+						granny_file_info* GrannyAnimInfo = GrannyGetFileInfo(GrannyFileAnim);
+
+						HandleAnimation(GrannyModelInfo->Skeletons[0], GrannyAnimInfo->Animations[0], std::filesystem::path(ref.string()).stem().string());
+						GrannyFreeFile(GrannyFileAnim);
+					}
+
+				}
+			}
+		}
+		else
+		{
+			printf("Warning: the Granny DLL currently loaded "
+				"doesn't match the .h file used during compilation\n");
+		}
+
+
+	}
+
+	SetSkeleton(m_scene->skeleton_modelbin_path);
+
+	if (m_CharacterFile == nullptr)
+	{
+		HandleSkeleton(m_skel->Skeleton);
+	}
+
+	{
+		FBXSDK_printf("\n");
+		FBXSDK_printf("Proxy LOD\n");
+
+		std::string proxyLOD = MakeCarRelativePath("Scene/ProxyLOD.modelbin");
+		SetProxyLOD(proxyLOD);
+
+		if (m_proxyLOD != nullptr)
+		{
+			HandleProxyLOD();
+			FBXSDK_printf("\t%s\n", proxyLOD.c_str());
+		}
+		else {
+			FBXSDK_printf("\tNone\n");
+		}
+	}
+
+	FBXSDK_printf("\n");
+	FBXSDK_printf("Materials\n");
+	FBXSDK_printf("\tProcessing...\n");
+
+	// media/_library and media/cars/_library
+	if (!m_game->GetBase().empty())
+	{
+		materials_container.push_back(fmnext::ContainerReader(m_game->GetPrimaryMaterialsLibrary().string()));
+		materials_container.push_back(fmnext::ContainerReader(m_game->GetMediaMaterialsLibrary().string()));
+	}
+
+	if (!m_game->GetBase().empty())
+	{
+		textures_container.push_back(fmnext::ContainerReader(m_game->GetPrimaryTexturesLibrary().string()));
+		textures_container.push_back(fmnext::ContainerReader(m_game->GetMediaTexturesLibrary().string()));
+	}
+
+	// media/cars/_library
+	if (!m_game->GetBase().empty())
+	{
+		auto sec_mat = m_game->GetSecondaryMaterialsLibrary();
+		auto sec_tex = m_game->GetSecondaryTexturesLibrary();
+
+		for (auto& mat_lib_entry : sec_mat)
+		{
+			std::string message;
+			message += "Secondary Material Library Found: ";
+			message += mat_lib_entry.string();
+			message += " \n";
+
+			materials_container.push_back(fmnext::ContainerReader(mat_lib_entry.string()));
+
+			//MGlobal::displayInfo(message.c_str());
+		}
+
+		for (auto& tex_lib_entry : sec_tex)
+		{
+			std::string message;
+			message += "Secondary Texture Library Found: ";
+			message += tex_lib_entry.string();
+			message += " \n";
+
+			textures_container.push_back(fmnext::ContainerReader(tex_lib_entry.string()));
+
+			//MGlobal::displayInfo(message.c_str());
+		}
+	}
+
+
+	for (const auto& upgradable_part : m_scene->upgradable_parts)
+	{
+		for (const auto& upgrade : upgradable_part.upgrade_models)
+		{
+			if (upgrade.car_body_id == -1)
+				continue;
+
+			if (auto item = std::find_if(car_bodies.begin(), car_bodies.end(), [&](auto& car_body) { return car_body.first == upgrade.id; }); item != std::end(car_bodies))
+			{
+				if (car_bodies[upgrade.car_body_id] != upgrade.parent_is_stock)
+				{
+					printf("Warning: CarBody %i is marked as both stock and non-stock. \n", upgrade.car_body_id);
+				}
+			}
+			else
+			{
+				car_bodies.emplace(upgrade.car_body_id, upgrade.parent_is_stock);
+			}
+		}
+	}
+
+	if (m_records)
+	{
+		car_upgrades.try_emplace(m_records->CarBodyID, true);
+	}
+
+	for (const auto& [id, parent_istock] : car_bodies) {
+		if (parent_istock) {
+			car_upgrades.try_emplace(id, true);
+		}
+	}
+
+
+	for (const auto& upgradable_part : m_scene->upgradable_parts)
+	{
+		for (const auto& upgrade : upgradable_part.upgrade_models)
+		{
+			if (auto item = std::find_if(car_upgrades.begin(), car_upgrades.end(), [&](auto& car_upgrade) { return car_upgrade.first == upgrade.id; }); item == std::end(car_upgrades))
+			{
+				if (auto result = std::find_if(std::begin(upgradable_part.shared_models), std::end(upgradable_part.shared_models), [&](const auto& data) { for (auto& upgrade_id : data.upgrade_ids) { return upgrade_id == upgrade.id; } return false;  }); result != std::end(upgradable_part.shared_models))
+				{
+					car_upgrades.emplace(upgrade.id, upgrade.is_stock);
+				}
+			}
+		}
+	}
+
+
+
+	for (const auto& part : m_scene->upgradable_parts)
+	{
+		for (auto& [upgrade_ids, model] : part.shared_models)
+		{
+			for (auto& id : upgrade_ids)
+			{
+				if (auto upgrade_item = std::find_if(std::begin(part.upgrade_models), std::end(part.upgrade_models), [&](const auto& data) { return data.id == id; }); upgrade_item != std::end(part.upgrade_models))
+				{
+					auto bundle = SetBundleData(model);
+
+					if (bundle) {
+						std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % id % fmnext::SceneReader::PartsToString(part.type) % model->type);
+						auto materials = HandleShaders(model, bundle, scheme);
+
+						list_items.emplace_back(upgrade_item->id, model, bundle, materials, scheme, static_cast<uint32_t>(part.type));
+					}
+				}
+			}
+		}
+
+	}
+
+	for (const auto& part : m_scene->non_upgradable_parts)
+	{
+		uint32_t upgrade_id = (m_records == nullptr) ? 0 : m_records->CarBodyID;
+		for (const auto& [id, parent_istock] : car_bodies) {
+			if (parent_istock) {
+				upgrade_id = id;
+			}
+		}
+
+		if (auto stock = std::find_if(car_upgrades.begin(), car_upgrades.end(), [&](auto val) { return val.second == true; }); stock != car_upgrades.end())
+		{
+			upgrade_id = stock->first;
+		}
+
+		for (const auto& model : part.models)
+		{
+			auto bundle = SetBundleData(model);
+
+			if (bundle) {
+
+				std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % upgrade_id % fmnext::SceneReader::PartsToString(part.type) % model->type);
+				auto materials = HandleShaders(model, bundle, scheme);
+
+				list_items.emplace_back(upgrade_id, model, bundle, materials, scheme, static_cast<uint32_t>(part.type));
+			}
+
+		}
+
+		if (part.type == fmnext::CCarParts_WheelStyle && m_records && !m_tires.empty())
+		{
+			for (const auto& model : part.models)
+			{
+				std::shared_ptr<fmnext::SceneReader::CarRenderModel11> tire_model = std::make_shared<fmnext::SceneReader::CarRenderModel11>();
+				tire_model->bone_id = model->bone_id;
+				tire_model->bone_name = model->bone_name;
+				tire_model->id = model->id;
+				tire_model->levels_of_detail = model->levels_of_detail;
+				tire_model->draw_groups = model->draw_groups;
+				tire_model->transform = model->transform;
+				tire_model->version = model->version;
+				tire_model->type = "Tires";
+
+				std::string position("tire");
+				position += GetContainerDirection(model->bone_name);
+
+				//{ "tireL", "tireL", "tireL", "tireL" };     =  previous
+				//{ "tireL", "tireL", "tireR", "tireR" };     =  previous/current
+				//{ "tireLF", "tireLR", "tireRF", "tireRR" }; =  current/fixed
+
+				for (const auto& [key, data] : m_tires)
+				{
+					std::smatch match_tire{};
+					std::string regex = (m_tires.size() <= 2) ? std::string(position.begin(), position.end() - 1) : position;
+
+					switch (static_cast<uint32_t>(m_tires.size()))
+					{
+					case 0x01:
+					{
+						tire_model->path = "game:\\media\\cars\\_library\\scene\\tires\\";
+						tire_model->path += m_records->TireModelName;
+						tire_model->path += std::string(std::string("\\") + position + std::string(key.begin() + regex.size(), key.end()));
+
+						if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_model->path; }) == std::end(list_items))
+						{
+							std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % upgrade_id % fmnext::SceneReader::PartsToString(static_cast<fmnext::CCarParts_Enum>(8)) % tire_model->type);
+							auto materials = HandleShaders(tire_model, data, scheme);
+
+							list_items.emplace_back(upgrade_id, tire_model, data, materials, scheme, 8);
+						}
+						break;
+					}
+					case 0x02:
+					case 0x04:
+					{
+						if (std::regex_search(key, match_tire, std::regex(regex, std::regex::icase)))
+						{
+							tire_model->path = "game:\\media\\cars\\_library\\scene\\tires\\";
+							tire_model->path += m_records->TireModelName;
+							tire_model->path += std::string(std::string("\\") + position + std::string(key.begin() + regex.size(), key.end()));
+
+							if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_model->path; }) == std::end(list_items))
+							{
+								std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % upgrade_id % fmnext::SceneReader::PartsToString(static_cast<fmnext::CCarParts_Enum>(8)) % tire_model->type);
+								auto materials = HandleShaders(tire_model, data, scheme);
+
+								list_items.emplace_back(upgrade_id, tire_model, data, materials, scheme, 8);
+							}
+						}
+						break;
+					}
+					default:
+						printf("Warning: Unsupported number of tire entries found: 0x%02X \n", static_cast<uint32_t>(m_tires.size()));
+						break;
+					}
+				}
+			}
+		}
+
+	}
+
+	SetupOutpuDirectory();
+	SetupOutputTextures();
+	SetupOutputMaterials();
+
+	FBXSDK_printf("\n");
+	std::cout << "Thumbnail" << "\n";
+	if (m_records)
+	{
+		if (!m_records->Thumbnail.empty())
+		{
+			for (const auto& path : m_game->GetResourceContainer(m_records->Thumbnail))
+			{
+				for (const auto& name : fmnext::GameResolver::GetThumbnailNames(m_records->Thumbnail))
+				{
+					auto thumbnail_container = fmnext::ContainerReader(path.string());
+
+					std::vector<char> thumb_blob{};
+					if (thumbnail_container.findName(name, thumb_blob)) {
+						auto thumb = fmnext::BundleReader(thumb_blob);
+						if (thumb.Init())
+						{
+							auto l_thumbnail = std::make_unique<fmnext::BundleReader::BundleData>(thumb.bundle);
+							ExportThumbnail(std::move(l_thumbnail), name);
+						}
+
+						std::cout << "\t" << name << "\n";
+						std::cout << "\t" << m_records->Thumbnail << "\n";
+						std::cout << "\t" << path.string() << "\n";
+					}
+
+					std::cout << "\n";
+				}
+			}
+		}
+	}
+
+	if (m_records)
+	{
+		if (m_records->Thumbnail.empty())
+		{
+			std::cout << "\t" << "Not available in fallback." << "\n";
+		}
+	}
+
+	FBXSDK_printf("\n");
+	FBXSDK_printf("Textures\n");
+
+	if (true) // ?? arg --textures 1 ????? ?? 
+	{
+		for (auto& [path, filename] : texture_list)
+		{
+			auto library_blob = HandleLibrary(path);
+
+			if (!library_blob.empty())
+			{
+				auto texture_bundle = fmnext::BundleReader(library_blob);
+				if (texture_bundle.Init())
+				{
+					std::filesystem::path path_name(mTextureOutputPath);
+					path_name /= std::filesystem::path(filename).replace_extension(".dds").string();
+					path_name.make_preferred();
+
+					auto texture_resolver = fmnext::TextureResolver(texture_bundle.bundle);
+					texture_resolver.SaveToDDSFile(path_name.string());
+
+					std::cout << "\t" << path << "\n";
+				}
+
+			}
+		}
+
+
+		auto Textures = m_container.getMediaTextureEntries();
+
+		for (auto& [path, filename] : Textures)
+		{
+			std::vector<char> buffer{};
+			if (m_container.findName(path, buffer))
+			{
+				std::smatch match_result;
+				std::regex_search(path, match_result, std::regex("UI/Textures", std::regex_constants::icase));
+
+				if (!match_result.ready())
+				{
+					std::filesystem::path path_name(mTextureOutputPath);
+
+					path_name /= std::filesystem::path(filename).replace_extension(".dds").string();
+					path_name.make_preferred();
+
+					if (!std::filesystem::exists(path_name))
+					{
+						auto texture_bundle = fmnext::BundleReader(buffer);
+						if (texture_bundle.Init())
+						{
+							auto texture_resolver = fmnext::TextureResolver(texture_bundle.bundle);
+							texture_resolver.SaveToDDSFile(path_name.string());
+
+							std::cout << "\t" << MakeCarRelativePath(path) << "\n";
+						}
+					}
+				}
+				else {
+					std::filesystem::path path_name(mTextureOutputPath);
+
+					path_name /= std::filesystem::path(filename).replace_extension(".dds").string();
+					path_name.make_preferred();
+
+					auto texture_bundle = fmnext::BundleReader(buffer);
+					if (texture_bundle.Init())
+					{
+						auto texture_resolver = fmnext::TextureResolver(texture_bundle.bundle);
+						texture_resolver.SaveToDDSFile(path_name.string());
+						//texture_resolver.SaveToPNGFile(path_name.string());
+
+						std::cout << "\t" << MakeCarRelativePath(path) << "\n";
+					}
+				}
+			}
+
+			buffer.clear();
+		}
+	}
+
+	FBXSDK_printf("\n");
+	FBXSDK_printf("Digital Gauges\n");
+	{
+		std::string digitalGauge = "UI/";
+		digitalGauge += m_scene->media_name;
+		digitalGauge += ".xaml";
+
+		std::vector<char> buffer{};
+		if (m_container.findName(digitalGauge, buffer))
+		{
+			std::filesystem::path path_name(mOutputPath);
+			path_name /= std::filesystem::path(digitalGauge).filename().string();
+			path_name.make_preferred();
+
+			if (!std::filesystem::exists(path_name))
+			{
+				std::ofstream stream(path_name, std::ios::binary | std::ios::out);
+				if (stream.is_open())
+				{
+					stream.write(buffer.data(), buffer.size());
+					stream.close();
+
+					std::cout << "\t" << MakeCarRelativePath(digitalGauge) << "\n";
+				}
+			}
+
+			buffer.clear();
+		}
+		else {
+			std::cout << "\tNone\n";
+		}
+	}
+
+
+	FBXSDK_printf("\n");
+	FBXSDK_printf("Vehicle Upgrades\n");
+
+	for (auto& [upgrade, is_stock] : car_upgrades)
+	{
+		std::cout << "\t" << upgrade << "\n";
+	}
+
+	FBXSDK_printf("\n");
+	FBXSDK_printf("Manufacturer Colors\n");
+
+	m_colors = GetBundleData("ManufacturerColors.bin");
+
+	ExportManufacturerColors();
+
+	if (m_colors != nullptr) //!m_colors->ManufacturerColors.empty()
+	{
+		if (!m_colors->ManufacturerColors.empty())
+		{
+			int color_index = 0;
+
+			for (auto& color : m_colors->ManufacturerColors)
+			{
+				for (auto& inst : color)
+				{
+					// std::filesystem::path(inst.path).filename().stem().string()
+					// inst.path
+					// inst.preview_color.x, inst.preview_color.y, inst.preview_color.z
+
+					uint32_t RR = static_cast<uint32_t>(std::round(inst.preview_color.x * 255.0f));
+					uint32_t GG = static_cast<uint32_t>(std::round(inst.preview_color.y * 255.0f));
+					uint32_t BB = static_cast<uint32_t>(std::round(inst.preview_color.z * 255.0f));
+
+					std::cout << "\t";
+					std::cout << " #" << std::uppercase << std::hex << GetHexColor(RR, GG, BB) << "\n";
+
+					{
+						if (fmnext::GameResolver::Contains(inst.path, m_scene->media_name))
+						{
+							std::string path = fmnext::GameResolver::Remove(inst.path, m_scene->media_name).string();
+							std::replace(path.begin(), path.end(), '\\', '/');
+
+							std::vector<char> mcolor_blob{};
+							if (m_container.findName(path, mcolor_blob))
+							{
+								auto material = GetBundleData(mcolor_blob);
+								//auto material_shader = GetBundleData(material->MaterialInstances[0]);
+
+								for (auto& param : material->ShaderParameters)
+								{
+									if (param.type == fmnext::ShaderParameter_Texture2D)
+									{
+										std::string texture = std::any_cast<std::string>(param.value);
+										// std::filesystem::path(texture).filename().stem().string()
+									}
+
+								}
+
+							}
+						}
+						else
+						{
+							std::string path = m_game->Remove(inst.path).string();
+							std::replace(path.begin(), path.end(), '\\', '/');
+
+							std::vector<char> mcolor_blob = FindAssetInContainer(path);
+							if (!mcolor_blob.empty())
+							{
+								auto material = GetBundleData(mcolor_blob);
+								//auto material_shader = GetBundleData(material->MaterialInstances[0]);
+
+								for (auto& param : material->ShaderParameters)
+								{
+									if (param.type == fmnext::ShaderParameter_Texture2D)
+									{
+										std::string texture = std::any_cast<std::string>(param.value);
+										// std::filesystem::path(texture).filename().stem().string()
+									}
+
+								}
+							}
+						}
+
+
+					}
+				}
+
+				++color_index;
+			}
+
+		}
+	}
+	else {
+		FBXSDK_printf("\tNot available.\n");
+	}
+
+	if (true) // arg --materials 1 ??
+	{
+		for (auto it = list_items.begin(); it != list_items.end(); ++it)
+		{
+			uint32_t index = static_cast<uint32_t>(std::distance(list_items.begin(), it));
+			ExportMaterialData(index, std::filesystem::path(it->model->path).filename().string());
+		}
+	}
+
+	//FbxAxisSystem SceneAxisSystem = mScene->GetGlobalSettings().GetAxisSystem();
+
+	//FbxAxisSystem AxisSystem(FbxAxisSystem::eMax);
+	//FbxSystemUnit UnitSystem(FbxSystemUnit::mm);
+
+	//AxisSystem.ConvertScene(mScene);
+	//UnitSystem.ConvertScene(mScene);
+
+
+	//FbxAxisSystem::Max.DeepConvertScene(mScene);
+
+	FBXSDK_printf("\n");
+	//FBXSDK_printf("Meshes\n");
+
+	if (m_records)
+	{
+		Initialize(m_records);
+
+		return true;
+	}
+	else {
+		Initialize(nullptr);
+
+		return true;
+	}
+
+	return false;
+}
+
+bool DCCManager::HandleBundle()
+{
+	auto reader = fmnext::BundleReader(mInputPath.string());
+
+	if (reader.Init())
+	{
+		auto resolver = fmnext::MeshResolver(std::make_shared<fmnext::BundleReader::BundleData>(reader.bundle), m_lod, static_cast<fmnext::GeometryType>(m_geo));
+
+		for (auto& mesh : resolver.GetMeshes())
+		{
+			FbxNode* mesh_obj = nullptr;
+			FbxSurfaceLambert* material_obj = nullptr;
+
+			std::string mesh_name(mesh.name);
+
+			auto material = std::find_if(reader.bundle.MaterialInstanceBundles.begin(), reader.bundle.MaterialInstanceBundles.end(), [&](auto& mtl) {
+				return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
+				});
+
+			if (material != std::end(reader.bundle.MaterialInstanceBundles))
+			{
+				mesh_name += "_";
+				mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
+			}
+
+			mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+			SetNodeTransformation(mesh_obj, mesh.matrix);
+
+			mRootNode->AddChild(mesh_obj);
+		}
+
+		return true;
+	}
+
+	return false;
 }
