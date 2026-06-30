@@ -29,7 +29,7 @@
 #define FT_TOOLKIT_BUILD_NUMBER  13
 #define FT_TOOLKIT_SCM_BRANCH    "branch-1.0"
 #define FT_TOOLKIT_SCM_TAGS      "release version-13"
-#define FT_TOOLKIT_SCM_DATETIME  "2026-06-10T00:00:00.000Z"
+#define FT_TOOLKIT_SCM_DATETIME  "2026-06-30T00:00:00.000Z"
 
 namespace fmnext
 {
