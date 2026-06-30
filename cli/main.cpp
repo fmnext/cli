@@ -57,6 +57,22 @@ int main(uint32_t argc, char* argv[])
 				return 1;
 			}
 
+			if (input_file.has_extension() && input_file.extension() == ".modelbin")
+			{
+				const auto start{ std::chrono::steady_clock::now() };
+
+				DCCManager manager = DCCManager(input_file.u8string(), output_file.u8string(), lod, geo, opt, fmnext::ResourceType::BUNDLE);
+				if (manager.Init())
+				{
+					const auto finish{ std::chrono::steady_clock::now() };
+					const std::chrono::duration<double> elapsed_seconds{ finish - start };
+
+					std::cout << "\nElapsed time: " << elapsed_seconds.count() << "s \n";
+				}
+
+				return 0;
+			}
+
 			if (input_file.has_extension() && input_file.extension() == ".zip")
 			{
 				if (!vm.count("lod") && !vm.count("geo") && !vm.count("opt") || !vm.count("lod") || !vm.count("geo") || !vm.count("opt"))
@@ -79,7 +95,7 @@ int main(uint32_t argc, char* argv[])
 
 				const auto start{ std::chrono::steady_clock::now() };
 
-				DCCManager manager = DCCManager(input_file.u8string(), output_file.u8string(), lod, geo, opt);
+				DCCManager manager = DCCManager(input_file.u8string(), output_file.u8string(), lod, geo, opt, fmnext::ResourceType::SCENE);
 				if (manager.Init())
 				{
 					const auto finish{ std::chrono::steady_clock::now() };

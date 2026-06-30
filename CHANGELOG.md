@@ -6,6 +6,14 @@ Release available for download on [GitHub](https://github.com/fmnext/cli/release
 
 ## Release History
 
+### Jun 30, 2026 (Release 13)
+* enable bunble conversion 
+* fix unexpected FM23 tire behavior
+* add material data exporter
+* add thumbnail dimensions to file name
+* add model scheme
+* add masks data to manufacturer colors json
+
 ### Jun 08, 2026 (Release 12)
 * fixed thumbnail exporter
 * added manufacturer colors exporter

@@ -12,6 +12,1515 @@ bool DCCManager::Init()
 
 	mRootNode = mScene->GetRootNode();
 
+	switch (m_res)
+	{
+	case fmnext::NONE: // deflt
+		break;
+	case fmnext::SCENE:
+		HandleScene();
+		break;
+	case fmnext::BUNDLE:
+		HandleBundle();
+		break;
+	}
+
+	FBXSDK_printf("\n");
+
+	std::filesystem::path lOutputPath(mOutputPath);
+
+	std::string lmedianame = std::filesystem::path(mInputPath).stem().string();
+	lmedianame += "_";
+	lmedianame += lodstr[m_lod];
+	lmedianame += ".fbx";
+
+	//lOutputPath /= std::filesystem::path(mInputPath).filename().replace_extension(".fbx");
+	lOutputPath /= lmedianame;
+	lOutputPath.make_preferred();
+
+	bool lResult = SaveDocument(mManager, mDocument, lOutputPath.string().c_str());
+
+	if (!lResult) FBXSDK_printf("\n\nAn error occurred while saving the document...\n");
+
+	FBXSDK_printf("Releasing resources...\n");
+
+	references.clear();
+
+	// Destroy all objects created by the FBX SDK.
+	DestroySdkObjects(mManager, lResult);
+
+	return true;
+}
+
+std::string DCCManager::GetVersionString()
+{
+	std::string version = std::to_string(FT_TOOLKIT_MAJOR_VERSION);
+	version += ".";
+	version += std::to_string(FT_TOOLKIT_MINOR_VERSION);
+	version += ".";
+	version += std::to_string(FT_TOOLKIT_PATCH_VERSION);
+	version += ".";
+	version += std::to_string(FT_TOOLKIT_BUILD_NUMBER);
+
+	return version;
+}
+
+void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
+{
+	std::unordered_map<std::string, DirectX::XMMATRIX> suspension_transforms;
+	std::unordered_map<std::string, FbxNode*> suspensions;
+
+	std::unordered_map<std::string, float> rotor_center_offsets;
+	std::unordered_map<std::string, float> spindle_offsets;
+
+	std::unordered_map<std::string, DirectX::XMMATRIX> rotor_transforms;
+	std::unordered_map<std::string, FbxNode*> rotors;
+
+	std::unordered_map<std::string, DirectX::XMMATRIX> caliper_transforms;
+	std::unordered_map<std::string, FbxNode*> calipers;
+
+	std::unordered_map<std::string, DirectX::XMMATRIX> spindle_transforms;
+
+	int color_override = 0, upgrade_level = 0;
+
+	if (auto stock = std::find_if(car_upgrades.begin(), car_upgrades.end(), [&](auto val) { return val.second == true; }); stock != car_upgrades.end())
+	{
+		upgrade_level = stock->first;
+	}
+
+	if (car_upgrades.empty()) // if somehow CarBodyID is completely missing, this will assume the ID is zero.
+	{
+		car_upgrades.try_emplace(0, true);
+	}
+
+	//if (!DCCManager::objExists(lod_group_name))
+	{
+		for (auto& [upgrade_id, is_stock] : car_upgrades)
+		{
+			FbxNode* lodGroupObj = CreateLocator();
+
+			int default_upgrade = upgrade_id == 0 ? m_scene->ordinal : upgrade_id;
+
+			std::string lod_group_name = lodstr[m_lod];
+			lod_group_name += "_";
+			lod_group_name += std::to_string(default_upgrade);
+
+			lodGroupObj->SetName(lod_group_name.c_str());
+
+			std::cout << std::to_string(default_upgrade) << "\n";
+
+			for (auto& data : list_items)
+			{
+				if (data.upgrade_id == upgrade_id)
+				{
+					std::cout << "\t" << data.model->path << "\n";
+
+					if (data.type == 44) // Wheels
+					{
+						fmnext::PartLocation direction = DCCManager::GetPartDirection(data.model->bone_name);
+
+						if (p_records)
+						{
+							float ModelTrackOuter{};
+							float ModelStockRideHeight{};
+
+							if (direction.end == fmnext::PartLocation::FRONT)
+							{
+								ModelTrackOuter = p_records->ModelFrontTrackOuter;
+								ModelStockRideHeight = p_records->ModelFrontStockRideHeight;
+							}
+
+							if (direction.end == fmnext::PartLocation::MID)
+							{
+								ModelTrackOuter = p_records->ModelFrontTrackOuter;
+								ModelStockRideHeight = p_records->ModelFrontStockRideHeight;
+							}
+
+							if (direction.end == fmnext::PartLocation::REAR)
+							{
+								ModelTrackOuter = p_records->ModelRearTrackOuter;
+								ModelStockRideHeight = p_records->ModelRearStockRideHeight;
+							}
+
+							int TireWidthMM = -1;
+							int TireAspect = -1;
+							int WheelOriginalDiameterIN = -1;
+							int WheelDiameterIN = -1;
+
+							switch (direction.end)
+							{
+							case fmnext::PartLocation::FRONT:
+								TireWidthMM = p_records->FrontTireWidthMM;
+								TireAspect = p_records->FrontTireAspect;
+								WheelOriginalDiameterIN = p_records->FrontWheelDiameterIN;
+								WheelDiameterIN = p_records->FrontWheelDiameterIN;
+								break;
+							case fmnext::PartLocation::MID:
+								TireWidthMM = p_records->FrontTireWidthMM;
+								TireAspect = p_records->FrontTireAspect;
+								WheelOriginalDiameterIN = p_records->FrontWheelDiameterIN;
+								WheelDiameterIN = p_records->FrontWheelDiameterIN;
+								break;
+							case fmnext::PartLocation::REAR:
+								TireWidthMM = p_records->RearTireWidthMM;
+								TireAspect = p_records->RearTireAspect;
+								WheelOriginalDiameterIN = p_records->RearWheelDiameterIN;
+								WheelDiameterIN = p_records->RearWheelDiameterIN;
+								break;
+							default:
+								// unreachable
+								break;
+							}
+
+							float half_wheel_outer_diameter_m = static_cast<float>(((TireAspect * 0.01) * (TireWidthMM * 0.001)) + WheelDiameterIN * 0.0254 / 2);
+
+							DirectX::XMFLOAT4 translate_v1 = DirectX::XMFLOAT4((ModelTrackOuter / 2), (half_wheel_outer_diameter_m - ModelStockRideHeight), (p_records->ModelWheelbase / 2), 0);
+							// y = or (min + max) / 2
+
+							if (direction.side == fmnext::PartLocation::LEFT)
+							{
+								translate_v1.x = -translate_v1.x;
+							}
+
+							if (direction.end == fmnext::PartLocation::REAR)
+							{
+								translate_v1.z = -translate_v1.z;
+							}
+
+							translate_v1.x += p_records->BottomCenterWheelbasePosX;
+							translate_v1.y += p_records->BottomCenterWheelbasePosY;
+							translate_v1.z -= p_records->BottomCenterWheelbasePosZ;
+
+							if (direction.end == fmnext::PartLocation::MID && direction.side == fmnext::PartLocation::LEFT)
+							{
+								//translate_v1.z = -translate_v1.z;
+
+								DirectX::XMVECTOR outScale, outQuat, outTrans;
+								DirectX::XMMatrixDecompose(&outScale, &outQuat, &outTrans, data.model->transform);
+
+								translate_v1.z = DirectX::XMVectorGetZ(outTrans);
+							}
+
+							if (direction.end == fmnext::PartLocation::MID && direction.side == fmnext::PartLocation::RIGHT)
+							{
+								//translate_v1.z = -translate_v1.z;
+
+								DirectX::XMVECTOR outScale, outQuat, outTrans;
+								DirectX::XMMatrixDecompose(&outScale, &outQuat, &outTrans, data.model->transform);
+
+								translate_v1.z = DirectX::XMVectorGetZ(outTrans);
+							}
+
+							DirectX::XMMATRIX spidle_transform = DirectX::XMMatrixTranslationFromVector(DirectX::XMLoadFloat4(&translate_v1));
+
+							if (direction.side == fmnext::PartLocation::RIGHT)
+							{
+								DirectX::XMVECTOR v1(spidle_transform.r[0]);
+								DirectX::XMVECTOR v2(spidle_transform.r[2]);
+
+								spidle_transform.r[0] = DirectX::XMVectorSet(-DirectX::XMVectorGetX(v1), DirectX::XMVectorGetY(v1), DirectX::XMVectorGetZ(v1), DirectX::XMVectorGetW(v1));
+								spidle_transform.r[2] = DirectX::XMVectorSet(DirectX::XMVectorGetX(v2), DirectX::XMVectorGetY(v2), -DirectX::XMVectorGetZ(v2), DirectX::XMVectorGetW(v2));
+							}
+
+							spindle_transforms.emplace(data.model->bone_name, spidle_transform);
+
+							{
+								float spindle_offset{};
+								float control_arm_offset = 0.30480003f; // 12 inch(0x3E9C0EC0)
+
+								std::string boneName = "spindle";
+
+								for (auto& bone : data.bundle->Skeleton)
+								{
+									if (bone.name == boneName)
+									{
+										spindle_offset = DirectX::XMVectorGetX(bone.transform.r[3]);
+										break;
+									}
+								}
+
+								for (auto& bone : m_skel->Skeleton)
+								{
+									if (bone.name == "controlArm")
+									{
+										control_arm_offset = DirectX::XMVectorGetX(bone.transform.r[3]);
+										break;
+									}
+								}
+
+								if (auto rotor_data = std::find_if(std::begin(list_items), std::end(list_items), [&](auto& mdl) { return mdl.model->bone_name == data.model->bone_name && mdl.model->type == "Brakes"; });
+									rotor_data != std::end(list_items)) {
+									for (auto& bone : rotor_data->bundle->Skeleton)
+									{
+										if (bone.name == "controlArm")
+										{
+											control_arm_offset = DirectX::XMVectorGetX(bone.transform.r[3]);
+											break;
+										}
+									};
+								}
+
+								spindle_offsets.emplace(data.model->bone_name, spindle_offset);
+
+
+								DirectX::XMFLOAT4 translate_v2 = DirectX::XMFLOAT4(spindle_offset, 0.f, 0.f, 1.f);
+
+								translate_v2.x += control_arm_offset;
+
+								if (direction.side == fmnext::PartLocation::RIGHT)
+								{
+									translate_v2.x = -translate_v2.x;
+								}
+
+								translate_v2.x += DirectX::XMVectorGetX(spidle_transform.r[3]);
+								translate_v2.y += DirectX::XMVectorGetY(spidle_transform.r[3]);
+								translate_v2.z += DirectX::XMVectorGetZ(spidle_transform.r[3]);
+								translate_v2.w = 1.f;
+
+								std::string suspension_name = "controlArm_" + DCCManager::GetContainerDirection(data.model->bone_name);
+
+								DirectX::XMMATRIX controlArm_transform = DirectX::XMMatrixTranslationFromVector(DirectX::XMLoadFloat4(&translate_v2));
+
+								suspension_transforms.emplace(suspension_name, controlArm_transform);
+
+								// wheels
+								auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo), p_records, data.type, direction.end);
+
+								std::string wheel_name = "wheel_" + DCCManager::GetContainerDirection(data.model->bone_name);
+
+								FbxNode* locatorObj = nullptr;
+
+								if (!resolver.GetMeshes().empty())
+								{
+									locatorObj = CreateLocator(spidle_transform);
+
+									//fnDagNode.setObject(wheelLocatorObj);
+									locatorObj->SetName(wheel_name.c_str());
+								}
+
+								for (const auto& mesh : resolver.GetMeshes())
+								{
+									FbxNode* mesh_obj = nullptr;
+									FbxSurfaceLambert* material_obj = nullptr;
+
+									std::string mesh_name(mesh.name);
+
+									auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
+										return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
+										});
+
+									if (material != std::end(data.bundle->MaterialInstanceBundles))
+									{
+										mesh_name += "_";
+										mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
+									}
+
+									if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
+									{
+										const auto& [key, material_data] = *material_it;
+
+										material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
+									}
+
+									mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+									SetNodeTransformation(mesh_obj, mesh.matrix);
+
+									locatorObj->AddChild(mesh_obj);
+								}
+
+
+								lodGroupObj->AddChild(locatorObj);
+							}
+						}
+
+						// wheels
+						if (!p_records)
+						{
+							auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo), nullptr, data.type, direction.end);
+
+							std::string wheel_name = "wheel_" + DCCManager::GetContainerDirection(data.model->bone_name);
+
+							FbxNode* locatorObj = nullptr;
+
+							if (!resolver.GetMeshes().empty())
+							{
+								locatorObj = CreateLocator(data.model->transform);
+								locatorObj->SetName(wheel_name.c_str());
+							}
+
+							for (const auto& mesh : resolver.GetMeshes())
+							{
+								FbxNode* mesh_obj = nullptr;
+								FbxSurfaceLambert* material_obj = nullptr;
+
+								std::string mesh_name(mesh.name);
+
+								auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
+									return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
+									});
+
+								if (material != std::end(data.bundle->MaterialInstanceBundles))
+								{
+									mesh_name += "_";
+									mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
+								}
+
+								if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
+								{
+									const auto& [key, material_data] = *material_it;
+
+									material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
+								}
+
+								mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+								SetNodeTransformation(mesh_obj, mesh.matrix);
+
+								locatorObj->AddChild(mesh_obj);
+							}
+
+							lodGroupObj->AddChild(locatorObj);
+						}
+
+						continue;
+					}
+
+					if (data.type == 8) // Tires
+					{
+						if ((m_lod == 0) && data.model->levels_of_detail.LODS || (m_lod >= 1) && !data.model->levels_of_detail.LODS || (m_lod >= 0) && data.model->levels_of_detail.LODS)
+						{
+							fmnext::PartLocation direction = DCCManager::GetPartDirection(data.model->bone_name);
+
+							auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo), p_records, 8, direction.end);
+
+							std::string tire_name = "tire_" + DCCManager::GetContainerDirection(data.model->bone_name);
+
+							FbxNode* locatorObj = nullptr;
+
+							if (!resolver.GetMeshes().empty())
+							{
+								auto trs = std::find_if(spindle_transforms.begin(), spindle_transforms.end(), [&](auto& d) { return d.first == data.model->bone_name; });
+
+								locatorObj = CreateLocator(trs->second);
+
+								locatorObj->SetName(tire_name.c_str());
+							}
+
+							for (const auto& mesh : resolver.GetMeshes())
+							{
+								FbxNode* mesh_obj = nullptr;
+								FbxSurfaceLambert* material_obj = nullptr;
+
+								std::string mesh_name(mesh.name);
+
+								auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
+									return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
+									});
+
+								if (material != std::end(data.bundle->MaterialInstanceBundles))
+								{
+									mesh_name += "_";
+									mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
+								}
+
+								if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
+								{
+									const auto& [key, material_data] = *material_it;
+
+									material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
+								}
+
+								mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+								SetNodeTransformation(mesh_obj, mesh.matrix);
+
+								locatorObj->AddChild(mesh_obj);
+							}
+
+							lodGroupObj->AddChild(locatorObj);
+						}
+
+						continue;
+					}
+
+					if (data.model->type == "ControlArm") // Suspensions
+					{
+						std::string suspension_name = "suspension_" + DCCManager::GetContainerDirection(data.model->bone_name);
+
+						FbxNode* locatorObj = CreateLocator(data.model->transform);
+						locatorObj->SetName(suspension_name.c_str());
+
+						auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo));
+
+						for (const auto& mesh : resolver.GetMeshes())
+						{
+							FbxNode* mesh_obj = nullptr;
+							FbxSurfaceLambert* material_obj = nullptr;
+
+							std::string mesh_name(mesh.name);
+
+							auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
+								return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
+								});
+
+							if (material != std::end(data.bundle->MaterialInstanceBundles))
+							{
+								mesh_name += "_";
+								mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
+							}
+
+							if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
+							{
+								const auto& [key, material_data] = *material_it;
+
+								material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
+							}
+
+							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+							SetNodeTransformation(mesh_obj, mesh.matrix);
+
+							locatorObj->AddChild(mesh_obj);
+						}
+
+						if (true) //has_db
+						{
+							suspensions.emplace(data.model->bone_name, locatorObj);
+						}
+
+						lodGroupObj->AddChild(locatorObj);
+
+						continue;
+					}
+
+					// caliper
+					if (data.model->bone_name.find("hub") != std::string::npos && data.model->type == "Brakes")
+					{
+						std::string caliper_name = "caliper_" + DCCManager::GetContainerDirection(data.model->bone_name);
+
+						FbxNode* locatorObj = CreateLocator(data.model->transform);
+						locatorObj->SetName(caliper_name.c_str());
+
+						auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo));
+
+						for (const auto& mesh : resolver.GetMeshes())
+						{
+							FbxNode* mesh_obj = nullptr;
+							FbxSurfaceLambert* material_obj = nullptr;
+
+							std::string mesh_name(mesh.name);
+
+							auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
+								return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
+								});
+
+							if (material != std::end(data.bundle->MaterialInstanceBundles))
+							{
+								mesh_name += "_";
+								mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
+							}
+
+							if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
+							{
+								const auto& [key, material_data] = *material_it;
+
+								material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
+							}
+
+							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+							SetNodeTransformation(mesh_obj, mesh.matrix);
+
+							locatorObj->AddChild(mesh_obj);
+						}
+
+						if (true) //has_db
+						{
+							calipers.emplace(data.model->bone_name, locatorObj);
+							caliper_transforms.emplace(data.model->bone_name, data.model->transform);
+
+							//MGlobal::displayInfo(std::string(path + "\n").c_str());
+						}
+
+						lodGroupObj->AddChild(locatorObj);
+
+						continue;
+					}
+
+					// rotor
+					if (data.model->bone_name.find("spindle") != std::string::npos && data.model->type == "Brakes")
+					{
+						std::string rotor_name = "rotor_" + DCCManager::GetContainerDirection(data.model->bone_name);
+
+						FbxNode* locatorObj = CreateLocator(data.model->transform);
+						locatorObj->SetName(rotor_name.c_str());
+
+						float control_arm_offset = 0.30480003f; // 12 inch(0x3E9C0EC0)
+
+						for (auto& bone : data.bundle->Skeleton)
+						{
+							if (bone.name == "controlArm")
+							{
+								control_arm_offset = DirectX::XMVectorGetX(bone.transform.r[3]);
+								break;
+							}
+						}
+
+						//float rotor_center_offset = 0.f;
+
+						if (true) //has_db
+						{
+							for (auto& bone : data.bundle->Skeleton)
+							{
+								if (bone.name.find("rotor") != std::string::npos)
+								{
+									//rotor_center_offset = DirectX::XMVectorGetX(bone.transform.r[3]);
+									rotor_center_offsets.emplace(data.model->bone_name, DirectX::XMVectorGetX(bone.transform.r[3]));
+
+									break;
+								}
+							}
+						}
+
+						auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo));
+
+						for (const auto& mesh : resolver.GetMeshes())
+						{
+							FbxNode* mesh_obj = nullptr;
+							FbxSurfaceLambert* material_obj = nullptr;
+
+							std::string mesh_name(mesh.name);
+
+							auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
+								return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
+								});
+
+							if (material != std::end(data.bundle->MaterialInstanceBundles))
+							{
+								mesh_name += "_";
+								mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
+							}
+
+							if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
+							{
+								const auto& [key, material_data] = *material_it;
+
+								material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
+							}
+
+							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+							SetNodeTransformation(mesh_obj, mesh.matrix);
+
+							locatorObj->AddChild(mesh_obj);
+						}
+
+						if (true) //has_db
+						{
+							rotors.emplace(data.model->bone_name, locatorObj);
+							rotor_transforms.emplace(data.model->bone_name, data.model->transform);
+
+							//MGlobal::displayInfo(std::string(path + "\n").c_str());
+						}
+
+						lodGroupObj->AddChild(locatorObj);
+
+						continue;
+					}
+
+					//DCCManager::objExists(std::filesystem::path(data.model->path).stem().string())
+					{
+						FbxNode* locatorObj = nullptr;
+
+						auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo));
+
+						if (!resolver.GetMeshes().empty())
+						{
+							locatorObj = CreateLocator(data.model->transform);
+
+							std::string bundle_name = std::filesystem::path(data.model->path).stem().string();
+
+							locatorObj->SetName(bundle_name.c_str());
+						}
+
+						for (const auto& mesh : resolver.GetMeshes())
+						{
+							FbxNode* mesh_obj = nullptr;
+							FbxSurfaceLambert* material_obj = nullptr;
+
+							std::string mesh_name(mesh.name);
+							std::string material_instance_name{};
+
+							auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
+								return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
+								});
+
+							if (material != std::end(data.bundle->MaterialInstanceBundles))
+							{
+								mesh_name += "_";
+								mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
+							}
+
+							if (!material->data.empty())
+							{
+								auto material_bundle_reader = fmnext::BundleReader(material->data);
+
+								if (material_bundle_reader.Init())
+								{
+									for (auto& inst : material_bundle_reader.bundle.MaterialInstances)
+									{
+										//MString message;
+										//message.format(MString("Mesh ^1s Material path ^2s"), mesh_name.c_str(), inst.c_str());
+
+										material_instance_name = std::filesystem::path(inst).stem().string();
+
+										//MGlobal::displayInfo(message);
+									}
+								}
+							}
+
+							if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
+							{
+								const auto& [key, material_data] = *material_it;
+
+								std::string material_name = std::any_cast<std::string>(material->metadata["Name"]);
+								/**/
+
+								bool carpaint_v0 = StringContains(material_name, "carpaint");
+								bool carpaint_v1 = StringContains(material_instance_name, "carpaint");
+								bool carpaint_v2 = StringContains(material_instance_name, "carpaint_secondary");
+
+								bool glass_clear_v0 = StringContains(material_instance_name, "gls");
+								bool glass_clear_v1 = StringContains(material_name, "gls");
+								bool gls_clear_custom = StringContains(material_name, "gls_clear_custom");
+								bool smooth_glass = StringContains(material_name, "smoothGlass");
+
+								if (m_colors && !m_colors->ManufacturerColors.empty())
+								{
+									if (carpaint_v0 || carpaint_v1 || carpaint_v2)
+									{
+										auto carpaint = m_colors->ManufacturerColors[color_override][0].preview_color;
+										material_obj = CreateCarpaintfromMemory(std::any_cast<std::string>(material->metadata["Name"]), carpaint);
+									}
+									else if (glass_clear_v0 || glass_clear_v1 || gls_clear_custom || smooth_glass)
+									{
+										material_obj = CreateGlassfromMemory(material_name);
+									}
+									else
+									{
+										material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
+									}
+								}
+								else
+								{
+									material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
+								}
+							}
+
+							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+							SetNodeTransformation(mesh_obj, mesh.matrix);
+
+
+							locatorObj->AddChild(mesh_obj);
+						}
+
+						lodGroupObj->AddChild(locatorObj);
+					}
+				}
+
+			}
+
+			mRootNode->AddChild(lodGroupObj);
+		}
+
+
+		for (const auto& [key, obj] : suspensions)
+		{
+			if (auto transform = suspension_transforms.find(key); transform != suspension_transforms.end())
+			{
+				SetNodeTransformation(obj, transform->second);
+
+				//MGlobal::displayInfo("Suspensions found!");
+			}
+			else {
+				//MGlobal::displayWarning("Suspensions not found!");
+			}
+		}
+
+		for (const auto& [key, obj] : calipers)
+		{
+			std::string spindle_key = "spindle" + DCCManager::GetContainerDirection(key);
+
+			if (auto offset = rotor_center_offsets.find(spindle_key); offset != rotor_center_offsets.end())
+			{
+				DirectX::XMMATRIX caliper_bone = caliper_transforms[key];
+				DirectX::XMMATRIX rotor_bone = rotor_transforms[spindle_key];
+
+				DirectX::XMMATRIX caliper_local_transform{};
+				DirectX::XMVECTOR caliper_local_translate{};
+
+				DirectX::XMMATRIX translate_x = DirectX::XMMatrixTranslation(spindle_offsets[spindle_key], 0, 0);
+
+				DirectX::XMMATRIX brake_transform{};
+				{
+					brake_transform += (translate_x * spindle_transforms[spindle_key]);
+
+					SetNodeTransformation(rotors[spindle_key], brake_transform);
+				}
+
+				caliper_local_translate = DirectX::XMVectorSet(offset->second, DirectX::XMVectorGetY(caliper_bone.r[3]) - DirectX::XMVectorGetY(rotor_bone.r[3]), DirectX::XMVectorGetZ(caliper_bone.r[3]) - DirectX::XMVectorGetZ(rotor_bone.r[3]), 1.f);
+
+				auto direction = DCCManager::GetPartDirection(key);
+
+				if (direction.side == fmnext::PartLocation::RIGHT)
+				{
+					caliper_local_transform += (caliper_bone * DirectX::XMMatrixRotationY(DirectX::XMConvertToRadians(180)));
+					caliper_local_translate = DirectX::XMVectorSet(DirectX::XMVectorGetX(caliper_local_translate), DirectX::XMVectorGetY(caliper_local_translate), -DirectX::XMVectorGetZ(caliper_local_translate), DirectX::XMVectorGetW(caliper_local_translate));
+
+					caliper_local_transform.r[3] = caliper_local_translate;
+				}
+				else
+				{
+					caliper_local_transform = caliper_bone;
+
+					caliper_local_transform.r[3] = caliper_local_translate;
+				}
+
+				DirectX::XMMATRIX caliper_transform{}; // assume that hub_transform == spindle_transform (rotate around Y-axis)
+				{
+					caliper_transform += (caliper_local_transform * brake_transform);
+
+					SetNodeTransformation(obj, caliper_transform);
+				}
+
+				//MGlobal::displayInfo("rotor_center_offset found!");
+			}
+			else
+			{
+				//MGlobal::displayWarning("rotor_center_offset not found!");
+			}
+		}
+
+	}
+}
+
+FbxMesh* DCCManager::RemoveIsolatedVertices(FbxMesh* prev_mesh)
+{
+	// Indices
+	std::vector<int32_t> relative_indices(prev_mesh->GetControlPointsCount(), -1);
+	std::vector<int32_t> absolute_indices;
+	std::vector<bool> vertex_used(prev_mesh->GetControlPointsCount(), false);
+
+	for (int32_t i = 0; i < prev_mesh->GetPolygonCount(); ++i)
+	{
+		for (int32_t p = 0; p < prev_mesh->GetPolygonSize(i); ++p)
+		{
+			int32_t index = prev_mesh->GetPolygonVertex(i, p);
+			vertex_used[index] = true;
+		}
+	}
+
+	int32_t new_vertex_id = 0;
+	for (int32_t i = 0; i < prev_mesh->GetControlPointsCount(); ++i)
+	{
+		if (vertex_used[i])
+		{
+			relative_indices[i] = new_vertex_id;
+			absolute_indices.push_back(i);
+			new_vertex_id++;
+		}
+	}
+
+	FbxMesh* result = FbxMesh::Create(mManager, "");
+	result->InitControlPoints(static_cast<uint32_t>(absolute_indices.size()));
+
+	{ // Vertices
+
+		FbxVector4* prev_control_points = prev_mesh->GetControlPoints();
+		FbxVector4* next_control_points = result->GetControlPoints();
+
+		for (int32_t i = 0; i < absolute_indices.size(); ++i)
+		{
+			int32_t index = absolute_indices[i];
+			next_control_points[i] = prev_control_points[index];
+		}
+	}
+
+	{ // Faces
+
+		for (int32_t i = 0; i < prev_mesh->GetPolygonCount(); ++i)
+		{
+			result->BeginPolygon(-1, -1, -1, false);
+
+			for (int32_t j = 0; j < prev_mesh->GetPolygonSize(i); ++j)
+			{
+				int32_t prev_index = prev_mesh->GetPolygonVertex(i, j);
+				int32_t next_index = relative_indices[prev_index];
+				result->AddPolygon(next_index);
+			}
+
+			result->EndPolygon();
+		}
+	}
+
+	{ // Normals
+
+		FbxLayerElementNormal* prev_mesh_normals = prev_mesh->GetLayer(0)->GetNormals();
+		FbxLayerElementNormal* next_mesh_normals = result->CreateElementNormal();
+
+		next_mesh_normals->SetMappingMode(prev_mesh_normals->GetMappingMode());
+		next_mesh_normals->SetReferenceMode(prev_mesh_normals->GetReferenceMode());
+
+		for (int32_t i = 0; i < absolute_indices.size(); ++i)
+		{
+			next_mesh_normals->GetDirectArray().Add(prev_mesh_normals->GetDirectArray().GetAt(absolute_indices[i]));
+		}
+	}
+
+	for (uint32_t id = 0; id < static_cast<uint32_t>(prev_mesh->GetLayerCount()); ++id)
+	{
+		// UVs
+		FbxLayerElementUV* prev_mesh_uv = prev_mesh->GetLayer(id)->GetUVs();
+		FbxGeometryElementUV* new_mesh_uv = result->CreateElementUV(prev_mesh_uv->GetName());
+
+		new_mesh_uv->SetMappingMode(prev_mesh_uv->GetMappingMode());
+		new_mesh_uv->SetReferenceMode(prev_mesh_uv->GetReferenceMode());
+
+		std::vector<bool> uv_used(prev_mesh_uv->GetDirectArray().GetCount(), false);
+		for (int32_t i = 0; i < prev_mesh_uv->GetIndexArray().GetCount(); ++i)
+		{
+			int32_t index = prev_mesh_uv->GetIndexArray().GetAt(i);
+			if (index >= 0 && index < prev_mesh_uv->GetDirectArray().GetCount())
+			{
+				uv_used[index] = true;
+			}
+		}
+
+		std::vector<int32_t> rel_uv_indices(prev_mesh_uv->GetDirectArray().GetCount(), -1);
+
+		int32_t new_uv_id = 0;
+		for (int32_t i = 0; i < prev_mesh_uv->GetDirectArray().GetCount(); ++i)
+		{
+			if (uv_used[i])
+			{
+				new_mesh_uv->GetDirectArray().Add(prev_mesh_uv->GetDirectArray().GetAt(i));
+
+				rel_uv_indices[i] = new_uv_id;
+				new_uv_id++;
+			}
+		}
+
+		for (int32_t i = 0; i < prev_mesh_uv->GetIndexArray().GetCount(); ++i)
+		{
+			int32_t index = prev_mesh_uv->GetIndexArray().GetAt(i);
+			int32_t mapped_index = (index >= 0 && index < prev_mesh_uv->GetDirectArray().GetCount()) ? rel_uv_indices[index] : -1;
+
+			new_mesh_uv->GetIndexArray().Add(mapped_index);
+		}
+	}
+
+	return result;
+}
+
+FbxNode* DCCManager::CreateMesh(const fmnext::Mesh* mesh, const std::string& Name, FbxSurfaceMaterial* material, bool useQuads)
+{
+	FbxMesh* lMesh = FbxMesh::Create(mManager, "");
+
+	uint32_t geometry = (useQuads) ? 4 : 3;
+	uint32_t numVertices = static_cast<int>(mesh->vertices.size()); // verts
+	uint32_t numIndices = static_cast<int>(mesh->indices.size());
+	uint32_t numPolygons = static_cast<int>(numIndices / geometry); // faces
+
+	// Create control points.
+	lMesh->InitControlPoints(numVertices);
+	FbxVector4* lControlPoints = lMesh->GetControlPoints();
+
+	for (uint32_t i = 0; i < numVertices; ++i)
+	{
+		lControlPoints[i] = FbxVector4(mesh->vertices[i].x, mesh->vertices[i].z, mesh->vertices[i].y);
+	}
+
+	FbxGeometryElementNormal* lElementNormal = lMesh->CreateElementNormal();
+
+	lElementNormal->SetMappingMode(FbxGeometryElement::eByControlPoint);
+	lElementNormal->SetReferenceMode(FbxGeometryElement::eDirect);
+
+	for (uint32_t i = 0; i < numVertices; ++i)
+	{
+		lElementNormal->GetDirectArray().Add(FbxVector4(mesh->normals[i].x, mesh->normals[i].z, mesh->normals[i].y));
+	}
+
+	for (uint32_t id = 0; id < static_cast<uint32_t>(mesh->uvs.size()) && !mesh->uvs[id].empty(); ++id)
+	{
+		// UVs Set {ID}
+		std::string uvSet = "UVChannel_";
+		uvSet += std::to_string(id + 1).c_str();
+
+		FbxGeometryElementUV* meshUV = lMesh->CreateElementUV(uvSet.c_str());
+		meshUV->SetMappingMode(FbxGeometryElement::eByPolygonVertex);
+		meshUV->SetReferenceMode(FbxGeometryElement::eIndexToDirect);
+
+		for (uint32_t i = 0; i < numIndices; i += geometry)
+		{
+			uint32_t v0 = mesh->indices[i + 0];
+			uint32_t v1 = (geometry == 4) ? mesh->indices[i + 2] : mesh->indices[i + 1];
+			uint32_t v2 = (geometry == 4) ? mesh->indices[i + 1] : mesh->indices[i + 2];
+			uint32_t v3 = (geometry == 4) ? mesh->indices[i + 3] : 0xffffffff;
+
+			meshUV->GetIndexArray().Add(v0);
+			meshUV->GetIndexArray().Add(v2);
+			meshUV->GetIndexArray().Add(v1);
+
+			if (v3 != 0xffffffff) {
+				meshUV->GetIndexArray().Add(v3);
+			}
+		}
+
+		for (uint32_t i = 0; i < static_cast<uint32_t>(mesh->uvs[id].size()); ++i)
+		{
+			meshUV->GetDirectArray().Add(FbxVector2(mesh->uvs[id][i].x, 1 - mesh->uvs[id][i].y));
+		}
+	}
+
+
+	for (uint32_t i = 0; i < numIndices; i += geometry) //numIndices
+	{
+		lMesh->BeginPolygon(-1, -1, false);
+		{
+			uint32_t v0 = mesh->indices[i + 0];
+			uint32_t v1 = (geometry == 4) ? mesh->indices[i + 1] : mesh->indices[i + 2];
+			uint32_t v2 = (geometry == 4) ? mesh->indices[i + 2] : mesh->indices[i + 1];
+			uint32_t v3 = (geometry == 4) ? mesh->indices[i + 3] : 0xffffffff;
+
+			lMesh->AddPolygon(v0);
+			lMesh->AddPolygon(v1);
+			lMesh->AddPolygon(v2);
+
+			if (v3 != 0xffffffff) {
+				lMesh->AddPolygon(v3);
+			}
+		}
+		lMesh->EndPolygon();
+	}
+
+	lMesh->BuildMeshEdgeArray();
+
+	// remove overlapping vertices
+	lMesh->RemoveBadPolygons();
+
+	// create a FbxNode
+	FbxNode* lNode = FbxNode::Create(mManager, Name.c_str());
+
+	if (m_opt == 1)
+	{
+		// set the node attribute
+		lNode->SetNodeAttribute(RemoveIsolatedVertices(lMesh));
+		lMesh->Destroy();
+	}
+	else {
+		// set the node attribute
+		lNode->SetNodeAttribute(lMesh);
+	}
+
+	// set the shading mode to view texture
+	lNode->SetShadingMode(FbxNode::eTextureShading);
+
+	// add material
+	lNode->AddMaterial(material);
+
+	// return the FbxNode
+	return lNode;
+}
+
+
+granny_file_info* GrannyBindingCallback(gstate_character_info* BindingInfo, char const* SourceFilename, void* UserData)
+{
+	//printf("SourceFilename: %s \n", SourceFilename);
+
+	auto result = std::find(references.begin(), references.end(), std::string(SourceFilename));
+	if (result == references.end())
+	{
+		references.push_back(std::string(SourceFilename));
+	}
+
+	return nullptr;
+}
+
+
+int DCCManager::InitStateMachine(const std::vector<char>& state)
+{
+	if (!GrannyVersionsMatch)
+	{
+		printf("Warning: the Granny DLL currently loaded "
+			"doesn't match the .h file used during compilation\n");
+		return EXIT_FAILURE;
+	}
+
+	granny_file* CharacterFile = 0;
+	gstate_character_info* CharacterInfo = 0;
+	granny_file_reader* StateFile = GrannyCreateMemoryFileReader(static_cast<granny_int32x>(state.size()), state.data());
+
+	if (GStateReadCharacterInfoFromReader(StateFile, CharacterFile, CharacterInfo) == false)
+	{
+		// handle error and bail
+		return EXIT_FAILURE;
+	}
+
+	for (granny_int32x i = 0; i < GStateGetNumAnimationSets(CharacterInfo); ++i)
+	{
+		std::string AnimationSetName = GStateGetAnimationSetName(CharacterInfo, i);
+
+		if (GStateBindCharacterFileReferences(CharacterInfo, GrannyBindingCallback, 0) == false)
+		{
+			// handle error and bail
+			//return EXIT_FAILURE;
+		}
+
+		printf("\tContextUID_state_machine: %s \n", AnimationSetName.c_str());
+	}
+
+	GrannyFreeFile(CharacterFile);
+	GrannyCloseFileReader(StateFile);
+
+	CharacterInfo = 0;
+	CharacterFile = 0;
+
+	return EXIT_SUCCESS;
+}
+
+rapidjson::Value DCCManager::StringToValue(const std::string& value, rapidjson::Document::AllocatorType& allocator)
+{
+	rapidjson::Value result(rapidjson::kStringType);
+	result.SetString(value.c_str(), static_cast<rapidjson::SizeType>(value.size()), allocator);
+
+	return result;
+}
+
+void DCCManager::ExportManufacturerColors()
+{
+	rapidjson::Document json_document{};
+	json_document.SetObject();
+
+	rapidjson::Value document_entries(rapidjson::kArrayType);
+
+	rapidjson::Value metadata_object(rapidjson::kObjectType);
+	metadata_object.AddMember("version", 1, json_document.GetAllocator());
+	metadata_object.AddMember("type", "ManufacturerColors", json_document.GetAllocator());
+	metadata_object.AddMember("generator", "ForzaTech CLI Toolkit", json_document.GetAllocator());
+
+	json_document.AddMember("metadata", metadata_object, json_document.GetAllocator());
+
+	if (m_colors != nullptr) {
+
+		for (auto it = m_colors->ManufacturerColors.begin(); it != m_colors->ManufacturerColors.end(); ++it)
+		{
+			size_t index = std::distance(m_colors->ManufacturerColors.begin(), it);
+
+			rapidjson::Value json_object(rapidjson::kObjectType);
+			json_object.AddMember("Color_Set", index, json_document.GetAllocator());
+
+			rapidjson::Value array(rapidjson::kArrayType);
+
+			for (auto colors = it->begin(); colors != it->end(); ++colors)
+			{
+				size_t idx = std::distance(it->begin(), colors);
+
+				rapidjson::Value color_object(rapidjson::kObjectType);
+				color_object.AddMember("Index_Mask", colors->material_index_mask.value(), json_document.GetAllocator());
+
+				if (colors->masks.has_value())
+				{
+					rapidjson::Value mask_array(rapidjson::kArrayType);
+
+					for (const auto& mask : colors->masks.value())
+					{
+						mask_array.PushBack(StringToValue(mask, json_document.GetAllocator()), json_document.GetAllocator());
+					}
+
+					color_object.AddMember("Masks", mask_array, json_document.GetAllocator());
+				} 
+				else 
+				{
+					color_object.AddMember("Masks", rapidjson::Value(rapidjson::kNullType), json_document.GetAllocator());
+				}
+
+				color_object.AddMember("Path", StringToValue(colors->path, json_document.GetAllocator()), json_document.GetAllocator());
+
+				rapidjson::Value preview_color(rapidjson::kArrayType);
+				preview_color.PushBack(colors->preview_color.x, json_document.GetAllocator());
+				preview_color.PushBack(colors->preview_color.y, json_document.GetAllocator());
+				preview_color.PushBack(colors->preview_color.z, json_document.GetAllocator());
+
+				color_object.AddMember("Preview_Color", preview_color, json_document.GetAllocator());
+
+				{
+					std::string path = m_game->Remove(colors->path).string();
+					std::replace(path.begin(), path.end(), '\\', '/');
+
+					std::vector<char> blob = FindAssetInContainer(path, 0);
+
+					if (!blob.empty())
+					{
+						color_object.AddMember("Shader_Parameters", GetShaderParametersArray(GetBundleData(blob), json_document.GetAllocator()), json_document.GetAllocator());
+						blob.clear();
+					}
+				}
+				array.PushBack(color_object, json_document.GetAllocator());
+			}
+
+			json_object.AddMember("Data", array, json_document.GetAllocator());
+			document_entries.PushBack(json_object, json_document.GetAllocator());
+		}
+		json_document.AddMember("Colors", document_entries, json_document.GetAllocator());
+	}
+
+	std::filesystem::path fpath(mOutputPath);
+	fpath /= "ManufacturerColors.json";
+	fpath.make_preferred();
+
+	if (!std::filesystem::exists(fpath))
+	{
+		std::ofstream ostream(fpath);
+		rapidjson::OStreamWrapper osw(ostream);
+
+		rapidjson::PrettyWriter<rapidjson::OStreamWrapper, rapidjson::UTF8<>> writer(osw);
+		writer.SetIndent(' ', 4);
+		if (json_document.Accept(writer))
+		{
+			ostream.close();
+			writer.Flush();
+		}
+	}
+}
+
+std::string DCCManager::GetHexHash(int value)
+{
+	std::stringstream result;
+	result << std::uppercase << std::hex << value;
+
+	return std::string(result.str());
+}
+
+rapidjson::Value DCCManager::GetShaderParametersArray(std::shared_ptr<fmnext::BundleReader::BundleData> bundle, rapidjson::Document::AllocatorType& allocator)
+{
+	rapidjson::Value array(rapidjson::kArrayType);
+
+	for (auto it = bundle->ShaderParameters.begin(); it != bundle->ShaderParameters.end(); ++it) {
+		uint32_t itx = static_cast<uint32_t>(std::distance(bundle->ShaderParameters.begin(), it));
+
+		switch (it->type) {
+		case fmnext::ShaderParameter_Vector: {
+			auto result = std::any_cast<DirectX::XMFLOAT4>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value jsonArray(rapidjson::kArrayType);
+			jsonArray.PushBack(result.x, allocator);
+			jsonArray.PushBack(result.y, allocator);
+			jsonArray.PushBack(result.z, allocator);
+			jsonArray.PushBack(result.w, allocator);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Vector", allocator);
+			object.AddMember("Data", jsonArray, allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Color: {
+			auto result = std::any_cast<DirectX::XMFLOAT4>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value jsonArray(rapidjson::kArrayType);
+			jsonArray.PushBack(result.x, allocator);
+			jsonArray.PushBack(result.y, allocator);
+			jsonArray.PushBack(result.z, allocator);
+			jsonArray.PushBack(result.w, allocator);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+			
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Color", allocator);
+			object.AddMember("Data", jsonArray, allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Float: {
+			auto result = std::any_cast<float>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Float", allocator);
+			object.AddMember("Data", result, allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Bool: {
+			auto result = std::any_cast<bool>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Bool", allocator);
+			object.AddMember("Data", result, allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Int:
+		{
+			auto result = std::any_cast<int32_t>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Int", allocator);
+			object.AddMember("Data", result, allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Swizzle: {
+			auto result = std::any_cast<std::array<uint8_t, 16>>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Swizzle", allocator);
+			object.AddMember("Data", "No suitable data parser defined.", allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Texture2D: {
+			auto result = std::any_cast<std::string>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Texture2D", allocator);
+			object.AddMember("Data", StringToValue(result, allocator), allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Vector2:
+		{
+			auto result = std::any_cast<DirectX::XMFLOAT2>(it->value);
+
+			rapidjson::Value object(rapidjson::kObjectType);
+
+			rapidjson::Value jsonArray(rapidjson::kArrayType);
+			jsonArray.PushBack(result.x, allocator);
+			jsonArray.PushBack(result.y, allocator);
+
+			rapidjson::Value Name(rapidjson::kNullType);
+			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
+			{
+				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
+			}
+
+			object.AddMember("Id", itx, allocator);
+			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
+			object.AddMember("Name", Name, allocator);
+			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
+			object.AddMember("Type", "Vector2", allocator);
+			object.AddMember("Data", jsonArray, allocator);
+
+			array.PushBack(object, allocator);
+
+			break;
+		}
+		case fmnext::ShaderParameter_Sampler:
+		case fmnext::ShaderParameter_ColorGradient:
+		case fmnext::ShaderParameter_FunctionRange:
+			break;
+		}
+	};
+
+	return array;
+}
+
+void DCCManager::ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, const std::string& pFile)
+{
+	std::filesystem::path lOutputPath(mOutputPath);
+	std::string filename{};
+	if (const auto& texture = ptr->Textures.begin(); texture != ptr->Textures.end())
+	{
+		filename += std::filesystem::path(pFile).filename().stem().string();
+		filename += "_";
+		filename += std::to_string(texture->header.width);
+		filename += "x";
+		filename += std::to_string(texture->header.height);
+		filename += ".png";
+	}
+
+	lOutputPath /= std::filesystem::path(filename);
+	lOutputPath.make_preferred();
+
+	if (ptr && !std::filesystem::exists(lOutputPath))
+	{
+		auto texture_resolver = fmnext::TextureResolver(*ptr);
+		texture_resolver.SaveToPNGFile(lOutputPath.string());
+	}
+}
+
+void DCCManager::ExportMaterialData(int bundle_index, const std::string& pFile)
+{
+	rapidjson::Document json_document{};
+	json_document.SetObject();
+
+	rapidjson::Value metadata_object(rapidjson::kObjectType);
+	metadata_object.AddMember("version", 1, json_document.GetAllocator());
+	metadata_object.AddMember("type", "MaterialData", json_document.GetAllocator());
+	metadata_object.AddMember("generator", "ForzaTech CLI Toolkit", json_document.GetAllocator());
+
+	json_document.AddMember("metadata", metadata_object, json_document.GetAllocator());
+
+	json_document.AddMember("Bundle", StringToValue(list_items[bundle_index].model->path, json_document.GetAllocator()), json_document.GetAllocator());
+	json_document.AddMember("Schema", StringToValue(list_items[bundle_index].schema, json_document.GetAllocator()), json_document.GetAllocator());
+	json_document.AddMember("Version", list_items[bundle_index].model->version, json_document.GetAllocator());
+	json_document.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(list_items[bundle_index].model->guid_v13)), json_document.GetAllocator()), json_document.GetAllocator());
+
+	rapidjson::Value document_entries(rapidjson::kArrayType);
+
+	for (auto it = list_items[bundle_index].bundle->Meshes.begin(); it != list_items[bundle_index].bundle->Meshes.end(); ++it)
+	{
+		auto materials = list_items[bundle_index];
+
+		auto result = std::find_if(list_items[bundle_index].materials.begin(), list_items[bundle_index].materials.end(), [&](auto& data) {
+			return data.first == it->mesh.material_id.value();
+			});
+
+		//int mesh_index = std::distance(list_items[bundle_index].bundle->Meshes.begin(), it);
+
+		auto material_instance = std::find_if(list_items[bundle_index].bundle->MaterialInstanceBundles.begin(), list_items[bundle_index].bundle->MaterialInstanceBundles.end(), [&](auto& data) {
+			return std::any_cast<int32_t>(data.metadata["Id"]) == it->mesh.material_id;
+			});
+
+		if (result != list_items[bundle_index].materials.end()) {
+
+			auto& [index, bundle_ptr] = *result;
+
+			//qDebug() << "mesh:" << QString("%0/%1_%2").arg(list_items[bundle_index].scheme.c_str(), std::any_cast<std::string>(it->metadata["Name"]).c_str()).arg(mesh_index);
+
+			if (material_instance != list_items[bundle_index].bundle->MaterialInstanceBundles.end()) {
+				//qDebug() << "instance:" << std::any_cast<std::string>(material_instance->metadata["Name"]);
+			}
+
+			rapidjson::Value json_object(rapidjson::kObjectType);
+
+			rapidjson::Value json_matloc_array = GetShaderParametersArray(materials.materials.find(index)->second.local, json_document.GetAllocator());
+			rapidjson::Value json_matins_array = GetShaderParametersArray(materials.materials.find(index)->second.instace, json_document.GetAllocator());
+
+			//json_object.insert("Mesh", QString("%0/%1_%2").arg(list_items[bundle_index].scheme.c_str(), std::any_cast<std::string>(it->metadata["Name"]).c_str()).arg(mesh_index));
+			json_object.AddMember("Mesh", StringToValue(std::any_cast<std::string>(it->metadata["Name"]), json_document.GetAllocator()), json_document.GetAllocator());
+
+			if (material_instance != list_items[bundle_index].bundle->MaterialInstanceBundles.end()) {
+				json_object.AddMember("Name", StringToValue(std::any_cast<std::string>(material_instance->metadata["Name"]), json_document.GetAllocator()), json_document.GetAllocator());
+			}
+
+			json_object.AddMember("Material", StringToValue(bundle_ptr.path, json_document.GetAllocator()), json_document.GetAllocator());
+			json_object.AddMember("Shader", StringToValue(bundle_ptr.instace->MaterialInstances[0], json_document.GetAllocator()), json_document.GetAllocator());
+			json_object.AddMember("Local", json_matloc_array, json_document.GetAllocator());
+			json_object.AddMember("Instance", json_matins_array, json_document.GetAllocator());
+			json_object.AddMember("Id", it->mesh.material_id.value(), json_document.GetAllocator());
+
+			document_entries.PushBack(json_object, json_document.GetAllocator());
+		}
+	}
+
+	json_document.AddMember("Materials", document_entries, json_document.GetAllocator());
+
+	std::filesystem::path fpath(mMaterialOutputPath);
+	fpath /= std::filesystem::path(pFile).replace_extension(".json");
+	fpath.make_preferred();
+
+	std::filesystem::path filePath = DCCManager::DeduplicatePath(fpath.string());
+
+	if (!std::filesystem::exists(filePath))
+	{
+		std::ofstream ostream(filePath);
+		rapidjson::OStreamWrapper osw(ostream);
+
+		rapidjson::PrettyWriter<rapidjson::OStreamWrapper, rapidjson::UTF8<>> writer(osw);
+		writer.SetIndent(' ', 4);
+		if (json_document.Accept(writer))
+		{
+			ostream.close();
+			writer.Flush();
+		}
+	}
+}
+
+bool DCCManager::HandleScene()
+{
 	m_container = fmnext::ContainerReader(mInputPath.string());
 	m_game = std::make_unique<fmnext::GameResolver>(mInputPath.string());
 
@@ -334,17 +1843,14 @@ bool DCCManager::Init()
 			{
 				if (auto upgrade_item = std::find_if(std::begin(part.upgrade_models), std::end(part.upgrade_models), [&](const auto& data) { return data.id == id; }); upgrade_item != std::end(part.upgrade_models))
 				{
-					//QString scheme = QString("%0/%1/%2").arg(std::to_string(id).c_str(), root_item->data(0, Qt::DisplayRole).toString(), model->type.c_str());
-
 					auto bundle = SetBundleData(model);
 
 					if (bundle) {
-						std::string scheme = "";
+						std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % id % fmnext::SceneReader::PartsToString(part.type) % model->type);
 						auto materials = HandleShaders(model, bundle, scheme);
 
 						list_items.emplace_back(upgrade_item->id, model, bundle, materials, scheme, static_cast<uint32_t>(part.type));
 					}
-
 				}
 			}
 		}
@@ -370,7 +1876,8 @@ bool DCCManager::Init()
 			auto bundle = SetBundleData(model);
 
 			if (bundle) {
-				std::string scheme = "";
+
+				std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % upgrade_id % fmnext::SceneReader::PartsToString(part.type) % model->type);
 				auto materials = HandleShaders(model, bundle, scheme);
 
 				list_items.emplace_back(upgrade_id, model, bundle, materials, scheme, static_cast<uint32_t>(part.type));
@@ -414,7 +1921,7 @@ bool DCCManager::Init()
 
 						if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_model->path; }) == std::end(list_items))
 						{
-							std::string scheme = "";
+							std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % upgrade_id % fmnext::SceneReader::PartsToString(static_cast<fmnext::CCarParts_Enum>(8)) % tire_model->type);
 							auto materials = HandleShaders(tire_model, data, scheme);
 
 							list_items.emplace_back(upgrade_id, tire_model, data, materials, scheme, 8);
@@ -432,7 +1939,7 @@ bool DCCManager::Init()
 
 							if (std::find_if(list_items.begin(), list_items.end(), [&](const auto& pitem) { return pitem.model->path == tire_model->path; }) == std::end(list_items))
 							{
-								std::string scheme = "";
+								std::string scheme = boost::str(boost::format("%1%/%2%/%3%") % upgrade_id % fmnext::SceneReader::PartsToString(static_cast<fmnext::CCarParts_Enum>(8)) % tire_model->type);
 								auto materials = HandleShaders(tire_model, data, scheme);
 
 								list_items.emplace_back(upgrade_id, tire_model, data, materials, scheme, 8);
@@ -452,6 +1959,7 @@ bool DCCManager::Init()
 
 	SetupOutpuDirectory();
 	SetupOutputTextures();
+	SetupOutputMaterials();
 
 	FBXSDK_printf("\n");
 	std::cout << "Thumbnail" << "\n";
@@ -471,13 +1979,7 @@ bool DCCManager::Init()
 						if (thumb.Init())
 						{
 							auto l_thumbnail = std::make_unique<fmnext::BundleReader::BundleData>(thumb.bundle);
-
-							std::string lfilename(std::filesystem::path(name).stem().string());
-							lfilename += "_";
-							lfilename += path.stem().string();
-							lfilename += ".png";
-
-							ExportThumbnail(std::move(l_thumbnail), lfilename);
+							ExportThumbnail(std::move(l_thumbnail), name);
 						}
 
 						std::cout << "\t" << name << "\n";
@@ -708,6 +2210,15 @@ bool DCCManager::Init()
 		FBXSDK_printf("\tNot available.\n");
 	}
 
+	if (true) // arg --materials 1 ??
+	{
+		for (auto it = list_items.begin(); it != list_items.end(); ++it)
+		{
+			uint32_t index = static_cast<uint32_t>(std::distance(list_items.begin(), it));
+			ExportMaterialData(index, std::filesystem::path(it->model->path).filename().string());
+		}
+	}
+
 	//FbxAxisSystem SceneAxisSystem = mScene->GetGlobalSettings().GetAxisSystem();
 
 	//FbxAxisSystem AxisSystem(FbxAxisSystem::eMax);
@@ -725,1396 +2236,51 @@ bool DCCManager::Init()
 	if (m_records)
 	{
 		Initialize(m_records);
+
+		return true;
 	}
 	else {
 		Initialize(nullptr);
+
+		return true;
 	}
 
-	FBXSDK_printf("\n");
-
-	std::filesystem::path lOutputPath(mOutputPath);
-
-	std::string lmedianame = std::filesystem::path(mInputPath).stem().string();
-	lmedianame += "_";
-	lmedianame += lodstr[m_lod];
-	lmedianame += ".fbx";
-
-	//lOutputPath /= std::filesystem::path(mInputPath).filename().replace_extension(".fbx");
-	lOutputPath /= lmedianame;
-	lOutputPath.make_preferred();
-
-	bool lResult = SaveDocument(mManager, mDocument, lOutputPath.string().c_str());
-
-	if (!lResult) FBXSDK_printf("\n\nAn error occurred while saving the document...\n");
-
-	FBXSDK_printf("Releasing resources...\n");
-
-	references.clear();
-
-	// Destroy all objects created by the FBX SDK.
-	DestroySdkObjects(mManager, lResult);
-
-	return true;
+	return false;
 }
 
-std::string DCCManager::GetVersionString()
+bool DCCManager::HandleBundle()
 {
-	std::string version = std::to_string(FT_TOOLKIT_MAJOR_VERSION);
-	version += ".";
-	version += std::to_string(FT_TOOLKIT_MINOR_VERSION);
-	version += ".";
-	version += std::to_string(FT_TOOLKIT_PATCH_VERSION);
-	version += ".";
-	version += std::to_string(FT_TOOLKIT_BUILD_NUMBER);
+	auto reader = fmnext::BundleReader(mInputPath.string());
 
-	return version;
+	if (reader.Init())
+	{
+		auto resolver = fmnext::MeshResolver(std::make_shared<fmnext::BundleReader::BundleData>(reader.bundle), m_lod, static_cast<fmnext::GeometryType>(m_geo));
+
+		for (auto& mesh : resolver.GetMeshes())
+		{
+			FbxNode* mesh_obj = nullptr;
+			FbxSurfaceLambert* material_obj = nullptr;
+
+			std::string mesh_name(mesh.name);
+
+			auto material = std::find_if(reader.bundle.MaterialInstanceBundles.begin(), reader.bundle.MaterialInstanceBundles.end(), [&](auto& mtl) {
+				return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
+				});
+
+			if (material != std::end(reader.bundle.MaterialInstanceBundles))
+			{
+				mesh_name += "_";
+				mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
+			}
+
+			mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+			SetNodeTransformation(mesh_obj, mesh.matrix);
+
+			mRootNode->AddChild(mesh_obj);
+		}
+
+		return true;
+	}
+
+	return false;
 }
-
-void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
-{
-	std::unordered_map<std::string, DirectX::XMMATRIX> suspension_transforms;
-	std::unordered_map<std::string, FbxNode*> suspensions;
-
-	std::unordered_map<std::string, float> rotor_center_offsets;
-	std::unordered_map<std::string, float> spindle_offsets;
-
-	std::unordered_map<std::string, DirectX::XMMATRIX> rotor_transforms;
-	std::unordered_map<std::string, FbxNode*> rotors;
-
-	std::unordered_map<std::string, DirectX::XMMATRIX> caliper_transforms;
-	std::unordered_map<std::string, FbxNode*> calipers;
-
-	std::unordered_map<std::string, DirectX::XMMATRIX> spindle_transforms;
-
-	int color_override = 0, upgrade_level = 0;
-
-	if (auto stock = std::find_if(car_upgrades.begin(), car_upgrades.end(), [&](auto val) { return val.second == true; }); stock != car_upgrades.end())
-	{
-		upgrade_level = stock->first;
-	}
-
-	if (car_upgrades.empty()) // if somehow CarBodyID is completely missing, this will assume the ID is zero.
-	{
-		car_upgrades.try_emplace(0, true);
-	}
-
-	//if (!DCCManager::objExists(lod_group_name))
-	{
-		for (auto& [upgrade_id, is_stock] : car_upgrades)
-		{
-			FbxNode* lodGroupObj = CreateLocator();
-
-			int default_upgrade = upgrade_id == 0 ? m_scene->ordinal : upgrade_id;
-
-			std::string lod_group_name = lodstr[m_lod];
-			lod_group_name += "_";
-			lod_group_name += std::to_string(default_upgrade);
-
-			lodGroupObj->SetName(lod_group_name.c_str());
-
-			std::cout << std::to_string(default_upgrade) << "\n";
-
-			for (auto& data : list_items)
-			{
-				if (data.upgrade_id == upgrade_id)
-				{
-					std::cout << "\t" << data.model->path << "\n";
-
-					if (data.type == 44) // Wheels
-					{
-						fmnext::PartLocation direction = DCCManager::GetPartDirection(data.model->bone_name);
-
-						if (p_records)
-						{
-							float ModelTrackOuter{};
-							float ModelStockRideHeight{};
-
-							if (direction.end == fmnext::PartLocation::FRONT)
-							{
-								ModelTrackOuter = p_records->ModelFrontTrackOuter;
-								ModelStockRideHeight = p_records->ModelFrontStockRideHeight;
-							}
-
-							if (direction.end == fmnext::PartLocation::MID)
-							{
-								ModelTrackOuter = p_records->ModelFrontTrackOuter;
-								ModelStockRideHeight = p_records->ModelFrontStockRideHeight;
-							}
-
-							if (direction.end == fmnext::PartLocation::REAR)
-							{
-								ModelTrackOuter = p_records->ModelRearTrackOuter;
-								ModelStockRideHeight = p_records->ModelRearStockRideHeight;
-							}
-
-							int TireWidthMM = -1;
-							int TireAspect = -1;
-							int WheelOriginalDiameterIN = -1;
-							int WheelDiameterIN = -1;
-
-							switch (direction.end)
-							{
-							case fmnext::PartLocation::FRONT:
-								TireWidthMM = p_records->FrontTireWidthMM;
-								TireAspect = p_records->FrontTireAspect;
-								WheelOriginalDiameterIN = p_records->FrontWheelDiameterIN;
-								WheelDiameterIN = p_records->FrontWheelDiameterIN;
-								break;
-							case fmnext::PartLocation::MID:
-								TireWidthMM = p_records->FrontTireWidthMM;
-								TireAspect = p_records->FrontTireAspect;
-								WheelOriginalDiameterIN = p_records->FrontWheelDiameterIN;
-								WheelDiameterIN = p_records->FrontWheelDiameterIN;
-								break;
-							case fmnext::PartLocation::REAR:
-								TireWidthMM = p_records->RearTireWidthMM;
-								TireAspect = p_records->RearTireAspect;
-								WheelOriginalDiameterIN = p_records->RearWheelDiameterIN;
-								WheelDiameterIN = p_records->RearWheelDiameterIN;
-								break;
-							default:
-								// unreachable
-								break;
-							}
-
-							float half_wheel_outer_diameter_m = static_cast<float>(((TireAspect * 0.01) * (TireWidthMM * 0.001)) + WheelDiameterIN * 0.0254 / 2);
-
-							DirectX::XMFLOAT4 translate_v1 = DirectX::XMFLOAT4((ModelTrackOuter / 2), (half_wheel_outer_diameter_m - ModelStockRideHeight), (p_records->ModelWheelbase / 2), 0);
-							// y = or (min + max) / 2
-
-							if (direction.side == fmnext::PartLocation::LEFT)
-							{
-								translate_v1.x = -translate_v1.x;
-							}
-
-							if (direction.end == fmnext::PartLocation::REAR)
-							{
-								translate_v1.z = -translate_v1.z;
-							}
-
-							translate_v1.x += p_records->BottomCenterWheelbasePosX;
-							translate_v1.y += p_records->BottomCenterWheelbasePosY;
-							translate_v1.z -= p_records->BottomCenterWheelbasePosZ;
-
-							if (direction.end == fmnext::PartLocation::MID && direction.side == fmnext::PartLocation::LEFT)
-							{
-								//translate_v1.z = -translate_v1.z;
-
-								DirectX::XMVECTOR outScale, outQuat, outTrans;
-								DirectX::XMMatrixDecompose(&outScale, &outQuat, &outTrans, data.model->transform);
-
-								translate_v1.z = DirectX::XMVectorGetZ(outTrans);
-							}
-
-							if (direction.end == fmnext::PartLocation::MID && direction.side == fmnext::PartLocation::RIGHT)
-							{
-								//translate_v1.z = -translate_v1.z;
-
-								DirectX::XMVECTOR outScale, outQuat, outTrans;
-								DirectX::XMMatrixDecompose(&outScale, &outQuat, &outTrans, data.model->transform);
-
-								translate_v1.z = DirectX::XMVectorGetZ(outTrans);
-							}
-
-							DirectX::XMMATRIX spidle_transform = DirectX::XMMatrixTranslationFromVector(DirectX::XMLoadFloat4(&translate_v1));
-
-							if (direction.side == fmnext::PartLocation::RIGHT)
-							{
-								DirectX::XMVECTOR v1(spidle_transform.r[0]);
-								DirectX::XMVECTOR v2(spidle_transform.r[2]);
-
-								spidle_transform.r[0] = DirectX::XMVectorSet(-DirectX::XMVectorGetX(v1), DirectX::XMVectorGetY(v1), DirectX::XMVectorGetZ(v1), DirectX::XMVectorGetW(v1));
-								spidle_transform.r[2] = DirectX::XMVectorSet(DirectX::XMVectorGetX(v2), DirectX::XMVectorGetY(v2), -DirectX::XMVectorGetZ(v2), DirectX::XMVectorGetW(v2));
-							}
-
-							spindle_transforms.emplace(data.model->bone_name, spidle_transform);
-
-							{
-								float spindle_offset{};
-								float control_arm_offset = 0.30480003f; // 12 inch(0x3E9C0EC0)
-
-								std::string boneName = "spindle";
-
-								for (auto& bone : data.bundle->Skeleton)
-								{
-									if (bone.name == boneName)
-									{
-										spindle_offset = DirectX::XMVectorGetX(bone.transform.r[3]);
-										break;
-									}
-								}
-
-								for (auto& bone : m_skel->Skeleton)
-								{
-									if (bone.name == "controlArm")
-									{
-										control_arm_offset = DirectX::XMVectorGetX(bone.transform.r[3]);
-										break;
-									}
-								}
-
-								if (auto rotor_data = std::find_if(std::begin(list_items), std::end(list_items), [&](auto& mdl) { return mdl.model->bone_name == data.model->bone_name && mdl.model->type == "Brakes"; });
-									rotor_data != std::end(list_items)) {
-									for (auto& bone : rotor_data->bundle->Skeleton)
-									{
-										if (bone.name == "controlArm")
-										{
-											control_arm_offset = DirectX::XMVectorGetX(bone.transform.r[3]);
-											break;
-										}
-									};
-								}
-
-								spindle_offsets.emplace(data.model->bone_name, spindle_offset);
-
-
-								DirectX::XMFLOAT4 translate_v2 = DirectX::XMFLOAT4(spindle_offset, 0.f, 0.f, 1.f);
-
-								translate_v2.x += control_arm_offset;
-
-								if (direction.side == fmnext::PartLocation::RIGHT)
-								{
-									translate_v2.x = -translate_v2.x;
-								}
-
-								translate_v2.x += DirectX::XMVectorGetX(spidle_transform.r[3]);
-								translate_v2.y += DirectX::XMVectorGetY(spidle_transform.r[3]);
-								translate_v2.z += DirectX::XMVectorGetZ(spidle_transform.r[3]);
-								translate_v2.w = 1.f;
-
-								std::string suspension_name = "controlArm_" + DCCManager::GetContainerDirection(data.model->bone_name);
-
-								DirectX::XMMATRIX controlArm_transform = DirectX::XMMatrixTranslationFromVector(DirectX::XMLoadFloat4(&translate_v2));
-
-								suspension_transforms.emplace(suspension_name, controlArm_transform);
-
-								// wheels
-								auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo), p_records, data.type, direction.end);
-
-								std::string wheel_name = "wheel_" + DCCManager::GetContainerDirection(data.model->bone_name);
-
-								FbxNode* locatorObj = nullptr;
-
-								if (!resolver.GetMeshes().empty())
-								{
-									locatorObj = CreateLocator(spidle_transform);
-
-									//fnDagNode.setObject(wheelLocatorObj);
-									locatorObj->SetName(wheel_name.c_str());
-								}
-
-								for (auto& mesh : resolver.GetMeshes())
-								{
-									FbxNode* mesh_obj = nullptr;
-									FbxSurfaceLambert* material_obj = nullptr;
-
-									std::string mesh_name{};
-
-									auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
-										return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
-										});
-
-									if (material != std::end(data.bundle->MaterialInstanceBundles))
-									{
-										mesh_name += mesh.name;
-										mesh_name += "_";
-										mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
-									}
-
-
-									if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
-									{
-										const auto& [key, material_data] = *material_it;
-
-										material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
-									}
-
-									mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-									SetNodeTransformation(mesh_obj, mesh.matrix);
-
-									locatorObj->AddChild(mesh_obj);
-								}
-
-
-								lodGroupObj->AddChild(locatorObj);
-							}
-						}
-
-						// wheels
-						if (!p_records)
-						{
-							auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo), nullptr, data.type, direction.end);
-
-							std::string wheel_name = "wheel_" + DCCManager::GetContainerDirection(data.model->bone_name);
-
-							FbxNode* locatorObj = nullptr;
-
-							if (!resolver.GetMeshes().empty())
-							{
-								locatorObj = CreateLocator(data.model->transform);
-								locatorObj->SetName(wheel_name.c_str());
-							}
-
-							for (auto& mesh : resolver.GetMeshes())
-							{
-								FbxNode* mesh_obj = nullptr;
-								FbxSurfaceLambert* material_obj = nullptr;
-
-								std::string mesh_name{};
-
-								auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
-									return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
-									});
-
-								if (material != std::end(data.bundle->MaterialInstanceBundles))
-								{
-									mesh_name += mesh.name;
-									mesh_name += "_";
-									mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
-								}
-
-								if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
-								{
-									const auto& [key, material_data] = *material_it;
-
-									material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
-								}
-
-								mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-								SetNodeTransformation(mesh_obj, mesh.matrix);
-
-								locatorObj->AddChild(mesh_obj);
-							}
-
-							lodGroupObj->AddChild(locatorObj);
-						}
-
-						continue;
-					}
-
-					if (data.type == 8) // Tires
-					{
-						if ((m_lod == 0) && data.model->levels_of_detail.LODS || (m_lod >= 1) && !data.model->levels_of_detail.LODS || (m_lod >= 0) && data.model->levels_of_detail.LODS)
-						{
-							fmnext::PartLocation direction = DCCManager::GetPartDirection(data.model->bone_name);
-
-							auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo), p_records, 8, direction.end);
-
-							std::string tire_name = "tire_" + DCCManager::GetContainerDirection(data.model->bone_name);
-
-							FbxNode* locatorObj = nullptr;
-
-							if (!resolver.GetMeshes().empty())
-							{
-								auto trs = std::find_if(spindle_transforms.begin(), spindle_transforms.end(), [&](auto& d) { return d.first == data.model->bone_name; });
-
-								locatorObj = CreateLocator(trs->second);
-
-								locatorObj->SetName(tire_name.c_str());
-							}
-
-							for (auto& mesh : resolver.GetMeshes())
-							{
-								FbxNode* mesh_obj = nullptr;
-								FbxSurfaceLambert* material_obj = nullptr;
-
-								std::string mesh_name{};
-
-								auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
-									return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
-									});
-
-								if (material != std::end(data.bundle->MaterialInstanceBundles))
-								{
-									mesh_name += mesh.name;
-									mesh_name += "_";
-									mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
-								}
-
-								if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
-								{
-									const auto& [key, material_data] = *material_it;
-
-									material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
-								}
-
-								mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-								SetNodeTransformation(mesh_obj, mesh.matrix);
-
-								locatorObj->AddChild(mesh_obj);
-							}
-
-							lodGroupObj->AddChild(locatorObj);
-						}
-
-						continue;
-					}
-
-					if (data.model->type == "ControlArm") // Suspensions
-					{
-						std::string suspension_name = "suspension_" + DCCManager::GetContainerDirection(data.model->bone_name);
-
-						FbxNode* locatorObj = CreateLocator(data.model->transform);
-						locatorObj->SetName(suspension_name.c_str());
-
-						auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo));
-
-						for (auto& mesh : resolver.GetMeshes())
-						{
-							FbxNode* mesh_obj = nullptr;
-							FbxSurfaceLambert* material_obj = nullptr;
-
-							std::string mesh_name{};
-
-							auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
-								return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
-								});
-
-							if (material != std::end(data.bundle->MaterialInstanceBundles))
-							{
-								mesh_name += mesh.name;
-								mesh_name += "_";
-								mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
-							}
-
-							if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
-							{
-								const auto& [key, material_data] = *material_it;
-
-								material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
-							}
-
-							mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-							SetNodeTransformation(mesh_obj, mesh.matrix);
-
-							locatorObj->AddChild(mesh_obj);
-						}
-
-						if (true) //has_db
-						{
-							suspensions.emplace(data.model->bone_name, locatorObj);
-						}
-
-						lodGroupObj->AddChild(locatorObj);
-
-						continue;
-					}
-
-					// caliper
-					if (data.model->bone_name.find("hub") != std::string::npos && data.model->type == "Brakes")
-					{
-						std::string caliper_name = "caliper_" + DCCManager::GetContainerDirection(data.model->bone_name);
-
-						FbxNode* locatorObj = CreateLocator(data.model->transform);
-						locatorObj->SetName(caliper_name.c_str());
-
-						auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo));
-
-						for (auto& mesh : resolver.GetMeshes())
-						{
-							FbxNode* mesh_obj = nullptr;
-							FbxSurfaceLambert* material_obj = nullptr;
-
-							std::string mesh_name{};
-
-							auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
-								return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
-								});
-
-							if (material != std::end(data.bundle->MaterialInstanceBundles))
-							{
-								mesh_name += mesh.name;
-								mesh_name += "_";
-								mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
-							}
-
-							if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
-							{
-								const auto& [key, material_data] = *material_it;
-
-								material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
-							}
-
-							mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-							SetNodeTransformation(mesh_obj, mesh.matrix);
-
-							locatorObj->AddChild(mesh_obj);
-						}
-
-						if (true) //has_db
-						{
-							calipers.emplace(data.model->bone_name, locatorObj);
-							caliper_transforms.emplace(data.model->bone_name, data.model->transform);
-
-							//MGlobal::displayInfo(std::string(path + "\n").c_str());
-						}
-
-						lodGroupObj->AddChild(locatorObj);
-
-						continue;
-					}
-
-					// rotor
-					if (data.model->bone_name.find("spindle") != std::string::npos && data.model->type == "Brakes")
-					{
-						std::string rotor_name = "rotor_" + DCCManager::GetContainerDirection(data.model->bone_name);
-
-						FbxNode* locatorObj = CreateLocator(data.model->transform);
-						locatorObj->SetName(rotor_name.c_str());
-
-						float control_arm_offset = 0.30480003f; // 12 inch(0x3E9C0EC0)
-
-						for (auto& bone : data.bundle->Skeleton)
-						{
-							if (bone.name == "controlArm")
-							{
-								control_arm_offset = DirectX::XMVectorGetX(bone.transform.r[3]);
-								break;
-							}
-						}
-
-						//float rotor_center_offset = 0.f;
-
-						if (true) //has_db
-						{
-							for (auto& bone : data.bundle->Skeleton)
-							{
-								if (bone.name.find("rotor") != std::string::npos)
-								{
-									//rotor_center_offset = DirectX::XMVectorGetX(bone.transform.r[3]);
-									rotor_center_offsets.emplace(data.model->bone_name, DirectX::XMVectorGetX(bone.transform.r[3]));
-
-									break;
-								}
-							}
-						}
-
-						auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo));
-
-						for (auto& mesh : resolver.GetMeshes())
-						{
-							FbxNode* mesh_obj = nullptr;
-							FbxSurfaceLambert* material_obj = nullptr;
-
-							std::string mesh_name{};
-
-							auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
-								return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
-								});
-
-							if (material != std::end(data.bundle->MaterialInstanceBundles))
-							{
-								mesh_name += mesh.name;
-								mesh_name += "_";
-								mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
-							}
-
-							if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
-							{
-								const auto& [key, material_data] = *material_it;
-
-								material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
-							}
-
-							mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-							SetNodeTransformation(mesh_obj, mesh.matrix);
-
-							locatorObj->AddChild(mesh_obj);
-						}
-
-						if (true) //has_db
-						{
-							rotors.emplace(data.model->bone_name, locatorObj);
-							rotor_transforms.emplace(data.model->bone_name, data.model->transform);
-
-							//MGlobal::displayInfo(std::string(path + "\n").c_str());
-						}
-
-						lodGroupObj->AddChild(locatorObj);
-
-						continue;
-					}
-
-					//DCCManager::objExists(std::filesystem::path(data.model->path).stem().string())
-					{
-						FbxNode* locatorObj = nullptr;
-
-						auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo));
-
-						if (!resolver.GetMeshes().empty())
-						{
-							locatorObj = CreateLocator(data.model->transform);
-
-							std::string bundle_name = std::filesystem::path(data.model->path).stem().string();
-
-							locatorObj->SetName(bundle_name.c_str());
-						}
-
-						for (auto& mesh : resolver.GetMeshes())
-						{
-							FbxNode* mesh_obj = nullptr;
-							FbxSurfaceLambert* material_obj = nullptr;
-
-							std::string mesh_name{};
-							std::string material_instance_name{};
-
-							auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
-								return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
-								});
-
-							if (material != std::end(data.bundle->MaterialInstanceBundles))
-							{
-								mesh_name += mesh.name;
-								mesh_name += "_";
-								mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
-							}
-
-							if (!material->data.empty())
-							{
-								auto material_bundle_reader = fmnext::BundleReader(material->data);
-
-								if (material_bundle_reader.Init())
-								{
-									for (auto& inst : material_bundle_reader.bundle.MaterialInstances)
-									{
-										//MString message;
-										//message.format(MString("Mesh ^1s Material path ^2s"), mesh_name.c_str(), inst.c_str());
-
-										material_instance_name = std::filesystem::path(inst).stem().string();
-
-										//MGlobal::displayInfo(message);
-									}
-								}
-							}
-
-							if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
-							{
-								const auto& [key, material_data] = *material_it;
-
-								std::string material_name = std::any_cast<std::string>(material->metadata["Name"]);
-								/**/
-
-								bool carpaint_v0 = StringContains(material_name, "carpaint");
-								bool carpaint_v1 = StringContains(material_instance_name, "carpaint");
-								bool carpaint_v2 = StringContains(material_instance_name, "carpaint_secondary");
-
-								bool glass_clear_v0 = StringContains(material_instance_name, "gls");
-								bool glass_clear_v1 = StringContains(material_name, "gls");
-								bool gls_clear_custom = StringContains(material_name, "gls_clear_custom");
-								bool smooth_glass = StringContains(material_name, "smoothGlass");
-
-								if (m_colors && !m_colors->ManufacturerColors.empty())
-								{
-									if (carpaint_v0 || carpaint_v1 || carpaint_v2)
-									{
-										auto carpaint = m_colors->ManufacturerColors[color_override][0].preview_color;
-										material_obj = CreateCarpaintfromMemory(std::any_cast<std::string>(material->metadata["Name"]), carpaint);
-									}
-									else if (glass_clear_v0 || glass_clear_v1 || gls_clear_custom || smooth_glass)
-									{
-										material_obj = CreateGlassfromMemory(material_name);
-									}
-									else
-									{
-										material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
-									}
-								}
-								else
-								{
-									material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
-								}
-							}
-
-							mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-							SetNodeTransformation(mesh_obj, mesh.matrix);
-
-
-							locatorObj->AddChild(mesh_obj);
-						}
-
-						lodGroupObj->AddChild(locatorObj);
-					}
-				}
-
-			}
-
-			mRootNode->AddChild(lodGroupObj);
-		}
-
-
-		for (auto& [key, obj] : suspensions)
-		{
-			if (auto transform = suspension_transforms.find(key); transform != suspension_transforms.end())
-			{
-				SetNodeTransformation(obj, transform->second);
-
-				//MGlobal::displayInfo("Suspensions found!");
-			}
-			else {
-				//MGlobal::displayWarning("Suspensions not found!");
-			}
-		}
-
-		for (auto& [key, obj] : calipers)
-		{
-			std::string spindle_key = "spindle" + DCCManager::GetContainerDirection(key);
-
-			if (auto offset = rotor_center_offsets.find(spindle_key); offset != rotor_center_offsets.end())
-			{
-				DirectX::XMMATRIX caliper_bone = caliper_transforms[key];
-				DirectX::XMMATRIX rotor_bone = rotor_transforms[spindle_key];
-
-				DirectX::XMMATRIX caliper_local_transform{};
-				DirectX::XMVECTOR caliper_local_translate{};
-
-				DirectX::XMMATRIX translate_x = DirectX::XMMatrixTranslation(spindle_offsets[spindle_key], 0, 0);
-
-				DirectX::XMMATRIX brake_transform{};
-				{
-					brake_transform += (translate_x * spindle_transforms[spindle_key]);
-
-					SetNodeTransformation(rotors[spindle_key], brake_transform);
-				}
-
-				caliper_local_translate = DirectX::XMVectorSet(offset->second, DirectX::XMVectorGetY(caliper_bone.r[3]) - DirectX::XMVectorGetY(rotor_bone.r[3]), DirectX::XMVectorGetZ(caliper_bone.r[3]) - DirectX::XMVectorGetZ(rotor_bone.r[3]), 1.f);
-
-				auto direction = DCCManager::GetPartDirection(key);
-
-				if (direction.side == fmnext::PartLocation::RIGHT)
-				{
-					caliper_local_transform += (caliper_bone * DirectX::XMMatrixRotationY(DirectX::XMConvertToRadians(180)));
-					caliper_local_translate = DirectX::XMVectorSet(DirectX::XMVectorGetX(caliper_local_translate), DirectX::XMVectorGetY(caliper_local_translate), -DirectX::XMVectorGetZ(caliper_local_translate), DirectX::XMVectorGetW(caliper_local_translate));
-
-					caliper_local_transform.r[3] = caliper_local_translate;
-				}
-				else
-				{
-					caliper_local_transform = caliper_bone;
-
-					caliper_local_transform.r[3] = caliper_local_translate;
-				}
-
-				DirectX::XMMATRIX caliper_transform{}; // assume that hub_transform == spindle_transform (rotate around Y-axis)
-				{
-					caliper_transform += (caliper_local_transform * brake_transform);
-
-					SetNodeTransformation(obj, caliper_transform);
-				}
-
-				//MGlobal::displayInfo("rotor_center_offset found!");
-			}
-			else
-			{
-				//MGlobal::displayWarning("rotor_center_offset not found!");
-			}
-		}
-
-	}
-}
-
-FbxMesh* DCCManager::RemoveIsolatedVertices(FbxMesh* prev_mesh)
-{
-	// Indices
-	std::vector<int32_t> relative_indices(prev_mesh->GetControlPointsCount(), -1);
-	std::vector<int32_t> absolute_indices;
-	std::vector<bool> vertex_used(prev_mesh->GetControlPointsCount(), false);
-
-	for (int32_t i = 0; i < prev_mesh->GetPolygonCount(); ++i)
-	{
-		for (int32_t p = 0; p < prev_mesh->GetPolygonSize(i); ++p)
-		{
-			int32_t index = prev_mesh->GetPolygonVertex(i, p);
-			vertex_used[index] = true;
-		}
-	}
-
-	int32_t new_vertex_id = 0;
-	for (int32_t i = 0; i < prev_mesh->GetControlPointsCount(); ++i)
-	{
-		if (vertex_used[i])
-		{
-			relative_indices[i] = new_vertex_id;
-			absolute_indices.push_back(i);
-			new_vertex_id++;
-		}
-	}
-
-	FbxMesh* result = FbxMesh::Create(mManager, "");
-	result->InitControlPoints(static_cast<uint32_t>(absolute_indices.size()));
-
-	{ // Vertices
-
-		FbxVector4* prev_control_points = prev_mesh->GetControlPoints();
-		FbxVector4* next_control_points = result->GetControlPoints();
-
-		for (int32_t i = 0; i < absolute_indices.size(); ++i)
-		{
-			int32_t index = absolute_indices[i];
-			next_control_points[i] = prev_control_points[index];
-		}
-	}
-
-	{ // Faces
-
-		for (int32_t i = 0; i < prev_mesh->GetPolygonCount(); ++i)
-		{
-			result->BeginPolygon(-1, -1, -1, false);
-
-			for (int32_t j = 0; j < prev_mesh->GetPolygonSize(i); ++j)
-			{
-				int32_t prev_index = prev_mesh->GetPolygonVertex(i, j);
-				int32_t next_index = relative_indices[prev_index];
-				result->AddPolygon(next_index);
-			}
-
-			result->EndPolygon();
-		}
-	}
-
-	{ // Normals
-
-		FbxLayerElementNormal* prev_mesh_normals = prev_mesh->GetLayer(0)->GetNormals();
-		FbxLayerElementNormal* next_mesh_normals = result->CreateElementNormal();
-
-		next_mesh_normals->SetMappingMode(prev_mesh_normals->GetMappingMode());
-		next_mesh_normals->SetReferenceMode(prev_mesh_normals->GetReferenceMode());
-
-		for (int32_t i = 0; i < absolute_indices.size(); ++i)
-		{
-			next_mesh_normals->GetDirectArray().Add(prev_mesh_normals->GetDirectArray().GetAt(absolute_indices[i]));
-		}
-	}
-
-	for (uint32_t id = 0; id < static_cast<uint32_t>(prev_mesh->GetLayerCount()); ++id)
-	{
-		// UVs
-		FbxLayerElementUV* prev_mesh_uv = prev_mesh->GetLayer(id)->GetUVs();
-		FbxGeometryElementUV* new_mesh_uv = result->CreateElementUV(prev_mesh_uv->GetName());
-
-		new_mesh_uv->SetMappingMode(prev_mesh_uv->GetMappingMode());
-		new_mesh_uv->SetReferenceMode(prev_mesh_uv->GetReferenceMode());
-
-		std::vector<bool> uv_used(prev_mesh_uv->GetDirectArray().GetCount(), false);
-		for (int32_t i = 0; i < prev_mesh_uv->GetIndexArray().GetCount(); ++i)
-		{
-			int32_t index = prev_mesh_uv->GetIndexArray().GetAt(i);
-			if (index >= 0 && index < prev_mesh_uv->GetDirectArray().GetCount())
-			{
-				uv_used[index] = true;
-			}
-		}
-
-		std::vector<int32_t> rel_uv_indices(prev_mesh_uv->GetDirectArray().GetCount(), -1);
-
-		int32_t new_uv_id = 0;
-		for (int32_t i = 0; i < prev_mesh_uv->GetDirectArray().GetCount(); ++i)
-		{
-			if (uv_used[i])
-			{
-				new_mesh_uv->GetDirectArray().Add(prev_mesh_uv->GetDirectArray().GetAt(i));
-
-				rel_uv_indices[i] = new_uv_id;
-				new_uv_id++;
-			}
-		}
-
-		for (int32_t i = 0; i < prev_mesh_uv->GetIndexArray().GetCount(); ++i)
-		{
-			int32_t index = prev_mesh_uv->GetIndexArray().GetAt(i);
-			int32_t mapped_index = (index >= 0 && index < prev_mesh_uv->GetDirectArray().GetCount()) ? rel_uv_indices[index] : -1;
-
-			new_mesh_uv->GetIndexArray().Add(mapped_index);
-		}
-	}
-
-	return result;
-}
-
-FbxNode* DCCManager::CreateMesh(const std::vector<DirectX::XMFLOAT3>& vertices, const std::vector<uint32_t>& indices, const std::vector<DirectX::XMFLOAT3>& normals, const std::vector<std::vector<DirectX::XMFLOAT2>>& uvs, const std::string& Name, FbxSurfaceMaterial* material, bool useQuads)
-{
-	FbxMesh* lMesh = FbxMesh::Create(mManager, "");
-
-	uint32_t geometry = (useQuads) ? 4 : 3;
-	uint32_t numVertices = static_cast<int>(vertices.size()); // verts
-	uint32_t numIndices = static_cast<int>(indices.size());
-	uint32_t numPolygons = static_cast<int>(numIndices / geometry); // faces
-
-	// Create control points.
-	lMesh->InitControlPoints(numVertices);
-	FbxVector4* lControlPoints = lMesh->GetControlPoints();
-
-	for (uint32_t i = 0; i < numVertices; ++i)
-	{
-		lControlPoints[i] = FbxVector4(vertices[i].x, vertices[i].z, vertices[i].y);
-	}
-
-	FbxGeometryElementNormal* lElementNormal = lMesh->CreateElementNormal();
-
-	lElementNormal->SetMappingMode(FbxGeometryElement::eByControlPoint);
-	lElementNormal->SetReferenceMode(FbxGeometryElement::eDirect);
-
-	for (uint32_t i = 0; i < numVertices; ++i)
-	{
-		lElementNormal->GetDirectArray().Add(FbxVector4(normals[i].x, normals[i].z, normals[i].y));
-	}
-
-	for (uint32_t id = 0; id < static_cast<uint32_t>(uvs.size()) && !uvs[id].empty(); ++id)
-	{
-		// UVs Set {ID}
-		std::string uvSet = "UVChannel_";
-		uvSet += std::to_string(id + 1).c_str();
-
-		FbxGeometryElementUV* meshUV = lMesh->CreateElementUV(uvSet.c_str());
-		meshUV->SetMappingMode(FbxGeometryElement::eByPolygonVertex);
-		meshUV->SetReferenceMode(FbxGeometryElement::eIndexToDirect);
-
-		for (uint32_t i = 0; i < numIndices; i += geometry)
-		{
-			uint32_t v0 = indices[i + 0];
-			uint32_t v1 = (geometry == 4) ? indices[i + 2] : indices[i + 1];
-			uint32_t v2 = (geometry == 4) ? indices[i + 1] : indices[i + 2];
-			uint32_t v3 = (geometry == 4) ? indices[i + 3] : 0xffffffff;
-
-			meshUV->GetIndexArray().Add(v0);
-			meshUV->GetIndexArray().Add(v2);
-			meshUV->GetIndexArray().Add(v1);
-
-			if (v3 != 0xffffffff) {
-				meshUV->GetIndexArray().Add(v3);
-			}
-		}
-
-		for (uint32_t i = 0; i < static_cast<uint32_t>(uvs[id].size()); ++i)
-		{
-			meshUV->GetDirectArray().Add(FbxVector2(uvs[id][i].x, 1 - uvs[id][i].y));
-		}
-	}
-
-
-	for (uint32_t i = 0; i < numIndices; i += geometry) //numIndices
-	{
-		lMesh->BeginPolygon(-1, -1, false);
-		{
-			uint32_t v0 = indices[i + 0];
-			uint32_t v1 = (geometry == 4) ? indices[i + 1] : indices[i + 2];
-			uint32_t v2 = (geometry == 4) ? indices[i + 2] : indices[i + 1];
-			uint32_t v3 = (geometry == 4) ? indices[i + 3] : 0xffffffff;
-
-			lMesh->AddPolygon(v0);
-			lMesh->AddPolygon(v1);
-			lMesh->AddPolygon(v2);
-
-			if (v3 != 0xffffffff) {
-				lMesh->AddPolygon(v3);
-			}
-		}
-		lMesh->EndPolygon();
-	}
-
-	lMesh->BuildMeshEdgeArray();
-
-	// remove overlapping vertices
-	lMesh->RemoveBadPolygons();
-
-	// create a FbxNode
-	FbxNode* lNode = FbxNode::Create(mManager, Name.c_str());
-
-	if (m_opt == 1)
-	{
-		// set the node attribute
-		lNode->SetNodeAttribute(RemoveIsolatedVertices(lMesh));
-		lMesh->Destroy();
-	}
-	else {
-		// set the node attribute
-		lNode->SetNodeAttribute(lMesh);
-	}
-
-	// set the shading mode to view texture
-	lNode->SetShadingMode(FbxNode::eTextureShading);
-
-	// add material
-	lNode->AddMaterial(material);
-
-	// return the FbxNode
-	return lNode;
-}
-
-
-granny_file_info* GrannyBindingCallback(gstate_character_info* BindingInfo, char const* SourceFilename, void* UserData)
-{
-	//printf("SourceFilename: %s \n", SourceFilename);
-
-	auto result = std::find(references.begin(), references.end(), std::string(SourceFilename));
-	if (result == references.end())
-	{
-		references.push_back(std::string(SourceFilename));
-	}
-
-	return nullptr;
-}
-
-
-int DCCManager::InitStateMachine(const std::vector<char>& state)
-{
-	if (!GrannyVersionsMatch)
-	{
-		printf("Warning: the Granny DLL currently loaded "
-			"doesn't match the .h file used during compilation\n");
-		return EXIT_FAILURE;
-	}
-
-	granny_file* CharacterFile = 0;
-	gstate_character_info* CharacterInfo = 0;
-	granny_file_reader* StateFile = GrannyCreateMemoryFileReader(static_cast<granny_int32x>(state.size()), state.data());
-
-	if (GStateReadCharacterInfoFromReader(StateFile, CharacterFile, CharacterInfo) == false)
-	{
-		// handle error and bail
-		return EXIT_FAILURE;
-	}
-
-	for (granny_int32x i = 0; i < GStateGetNumAnimationSets(CharacterInfo); ++i)
-	{
-		std::string AnimationSetName = GStateGetAnimationSetName(CharacterInfo, i);
-
-		if (GStateBindCharacterFileReferences(CharacterInfo, GrannyBindingCallback, 0) == false)
-		{
-			// handle error and bail
-			//return EXIT_FAILURE;
-		}
-
-		printf("\tContextUID_state_machine: %s \n", AnimationSetName.c_str());
-	}
-
-	GrannyFreeFile(CharacterFile);
-	GrannyCloseFileReader(StateFile);
-
-	CharacterInfo = 0;
-	CharacterFile = 0;
-
-	return EXIT_SUCCESS;
-}
-
-rapidjson::Value DCCManager::StringToValue(const std::string& value, rapidjson::Document::AllocatorType& allocator)
-{
-	rapidjson::Value result(rapidjson::kStringType);
-	result.SetString(value.c_str(), static_cast<rapidjson::SizeType>(value.size()), allocator);
-
-	return result;
-}
-
-void DCCManager::ExportManufacturerColors()
-{
-	rapidjson::Document json_document{};
-	json_document.SetObject();
-
-	rapidjson::Value document_entries(rapidjson::kArrayType);
-
-	rapidjson::Value metadata_object(rapidjson::kObjectType);
-	metadata_object.AddMember("version", 1, json_document.GetAllocator());
-	metadata_object.AddMember("type", "ManufacturerColors", json_document.GetAllocator());
-	metadata_object.AddMember("generator", "ForzaTech CLI Toolkit", json_document.GetAllocator());
-
-	json_document.AddMember("metadata", metadata_object, json_document.GetAllocator());
-
-	if (m_colors != nullptr) {
-
-		for (auto it = m_colors->ManufacturerColors.begin(); it != m_colors->ManufacturerColors.end(); ++it)
-		{
-			size_t index = std::distance(m_colors->ManufacturerColors.begin(), it);
-
-			rapidjson::Value json_object(rapidjson::kObjectType);
-			json_object.AddMember("Color_Set", index, json_document.GetAllocator());
-
-			rapidjson::Value array(rapidjson::kArrayType);
-
-			for (auto colors = it->begin(); colors != it->end(); ++colors)
-			{
-				size_t idx = std::distance(it->begin(), colors);
-
-				rapidjson::Value color_object(rapidjson::kObjectType);
-
-				color_object.AddMember("Index_Mask", colors->material_index_mask.value(), json_document.GetAllocator());
-				color_object.AddMember("Path", StringToValue(colors->path, json_document.GetAllocator()), json_document.GetAllocator());
-
-				rapidjson::Value preview_color(rapidjson::kArrayType);
-				preview_color.PushBack(colors->preview_color.x, json_document.GetAllocator());
-				preview_color.PushBack(colors->preview_color.y, json_document.GetAllocator());
-				preview_color.PushBack(colors->preview_color.z, json_document.GetAllocator());
-
-				color_object.AddMember("Preview_Color", preview_color, json_document.GetAllocator());
-
-				{
-					std::string path = m_game->Remove(colors->path).string();
-					std::replace(path.begin(), path.end(), '\\', '/');
-
-					std::vector<char> blob = FindAssetInContainer(path, 0);
-
-					if (!blob.empty())
-					{
-						color_object.AddMember("Shader_Parameters", GetShaderParametersArray(GetBundleData(blob), json_document.GetAllocator()), json_document.GetAllocator());
-						blob.clear();
-					}
-				}
-				array.PushBack(color_object, json_document.GetAllocator());
-			}
-
-			json_object.AddMember("Data", array, json_document.GetAllocator());
-			document_entries.PushBack(json_object, json_document.GetAllocator());
-		}
-		json_document.AddMember("Colors", document_entries, json_document.GetAllocator());
-	}
-
-	std::filesystem::path fpath(mOutputPath);
-	fpath /= "ManufacturerColors.json";
-	fpath.make_preferred();
-
-	if (!std::filesystem::exists(fpath))
-	{
-		std::ofstream ostream(fpath);
-		rapidjson::OStreamWrapper osw(ostream);
-
-		rapidjson::PrettyWriter<rapidjson::OStreamWrapper, rapidjson::UTF8<>> writer(osw);
-		writer.SetIndent(' ', 4);
-		if (json_document.Accept(writer))
-		{
-			ostream.close();
-			writer.Flush();
-		}
-	}
-}
-
-std::string DCCManager::GetHexHash(int value)
-{
-	std::stringstream result;
-	result << std::uppercase << std::hex << value;
-
-	return std::string(result.str());
-}
-
-rapidjson::Value DCCManager::GetShaderParametersArray(std::shared_ptr<fmnext::BundleReader::BundleData> bundle, rapidjson::Document::AllocatorType& allocator)
-{
-	rapidjson::Value array(rapidjson::kArrayType);
-
-	for (auto it = bundle->ShaderParameters.begin(); it != bundle->ShaderParameters.end(); ++it) {
-		uint32_t itx = static_cast<uint32_t>(std::distance(bundle->ShaderParameters.begin(), it));
-
-		switch (it->type) {
-		case fmnext::ShaderParameter_Vector: {
-			auto result = std::any_cast<DirectX::XMFLOAT4>(it->value);
-
-			rapidjson::Value object(rapidjson::kObjectType);
-
-			rapidjson::Value jsonArray(rapidjson::kArrayType);
-			jsonArray.PushBack(result.x, allocator);
-			jsonArray.PushBack(result.y, allocator);
-			jsonArray.PushBack(result.z, allocator);
-			jsonArray.PushBack(result.w, allocator);
-
-			rapidjson::Value Name(rapidjson::kNullType);
-			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
-			{
-				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
-			}
-
-			object.AddMember("Id", itx, allocator);
-			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
-			object.AddMember("Name", Name, allocator);
-			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
-			object.AddMember("Type", "Vector", allocator);
-			object.AddMember("Data", jsonArray, allocator);
-
-			array.PushBack(object, allocator);
-
-			break;
-		}
-		case fmnext::ShaderParameter_Color: {
-			auto result = std::any_cast<DirectX::XMFLOAT4>(it->value);
-
-			rapidjson::Value object(rapidjson::kObjectType);
-
-			rapidjson::Value jsonArray(rapidjson::kArrayType);
-			jsonArray.PushBack(result.x, allocator);
-			jsonArray.PushBack(result.y, allocator);
-			jsonArray.PushBack(result.z, allocator);
-			jsonArray.PushBack(result.w, allocator);
-
-			rapidjson::Value Name(rapidjson::kNullType);
-			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
-			{
-				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
-			}
-			
-			object.AddMember("Id", itx, allocator);
-			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
-			object.AddMember("Name", Name, allocator);
-			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
-			object.AddMember("Type", "Color", allocator);
-			object.AddMember("Data", jsonArray, allocator);
-
-			array.PushBack(object, allocator);
-
-			break;
-		}
-		case fmnext::ShaderParameter_Float: {
-			auto result = std::any_cast<float>(it->value);
-
-			rapidjson::Value object(rapidjson::kObjectType);
-
-			rapidjson::Value Name(rapidjson::kNullType);
-			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
-			{
-				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
-			}
-
-			object.AddMember("Id", itx, allocator);
-			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
-			object.AddMember("Name", Name, allocator);
-			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
-			object.AddMember("Type", "Float", allocator);
-			object.AddMember("Data", result, allocator);
-
-			array.PushBack(object, allocator);
-
-			break;
-		}
-		case fmnext::ShaderParameter_Bool: {
-			auto result = std::any_cast<bool>(it->value);
-
-			rapidjson::Value object(rapidjson::kObjectType);
-
-			rapidjson::Value Name(rapidjson::kNullType);
-			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
-			{
-				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
-			}
-
-			object.AddMember("Id", itx, allocator);
-			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
-			object.AddMember("Name", Name, allocator);
-			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
-			object.AddMember("Type", "Bool", allocator);
-			object.AddMember("Data", result, allocator);
-
-			array.PushBack(object, allocator);
-
-			break;
-		}
-		case fmnext::ShaderParameter_Int:
-		{
-			auto result = std::any_cast<int32_t>(it->value);
-
-			rapidjson::Value object(rapidjson::kObjectType);
-
-			rapidjson::Value Name(rapidjson::kNullType);
-			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
-			{
-				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
-			}
-
-			object.AddMember("Id", itx, allocator);
-			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
-			object.AddMember("Name", Name, allocator);
-			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
-			object.AddMember("Type", "Int", allocator);
-			object.AddMember("Data", result, allocator);
-
-			array.PushBack(object, allocator);
-
-			break;
-		}
-		case fmnext::ShaderParameter_Swizzle: {
-			auto result = std::any_cast<std::array<uint8_t, 16>>(it->value);
-
-			rapidjson::Value object(rapidjson::kObjectType);
-
-			rapidjson::Value Name(rapidjson::kNullType);
-			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
-			{
-				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
-			}
-
-			object.AddMember("Id", itx, allocator);
-			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
-			object.AddMember("Name", Name, allocator);
-			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
-			object.AddMember("Type", "Swizzle", allocator);
-			object.AddMember("Data", "No suitable data parser defined.", allocator);
-
-			array.PushBack(object, allocator);
-
-			break;
-		}
-		case fmnext::ShaderParameter_Texture2D: {
-			auto result = std::any_cast<std::string>(it->value);
-
-			rapidjson::Value object(rapidjson::kObjectType);
-
-			rapidjson::Value Name(rapidjson::kNullType);
-			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
-			{
-				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
-			}
-
-			object.AddMember("Id", itx, allocator);
-			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
-			object.AddMember("Name", Name, allocator);
-			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
-			object.AddMember("Type", "Texture2D", allocator);
-			object.AddMember("Data", StringToValue(result, allocator), allocator);
-
-			array.PushBack(object, allocator);
-
-			break;
-		}
-		case fmnext::ShaderParameter_Vector2:
-		{
-			auto result = std::any_cast<DirectX::XMFLOAT2>(it->value);
-
-			rapidjson::Value object(rapidjson::kObjectType);
-
-			rapidjson::Value jsonArray(rapidjson::kArrayType);
-			jsonArray.PushBack(result.x, allocator);
-			jsonArray.PushBack(result.y, allocator);
-
-			rapidjson::Value Name(rapidjson::kNullType);
-			if (strcmp(fmnext::NameHashToString(it->hash), "null") != 0)
-			{
-				Name.SetString(rapidjson::StringRef(fmnext::NameHashToString(it->hash)), allocator);
-			}
-
-			object.AddMember("Id", itx, allocator);
-			object.AddMember("Hash", StringToValue(GetHexHash(it->hash), allocator), allocator);
-			object.AddMember("Name", Name, allocator);
-			object.AddMember("GUID", StringToValue(GetStringGUIDWithoutBraces(GetStringGUID(it->guid)), allocator), allocator);
-			object.AddMember("Type", "Vector2", allocator);
-			object.AddMember("Data", jsonArray, allocator);
-
-			array.PushBack(object, allocator);
-
-			break;
-		}
-		case fmnext::ShaderParameter_Sampler:
-		case fmnext::ShaderParameter_ColorGradient:
-		case fmnext::ShaderParameter_FunctionRange:
-			break;
-		}
-	};
-
-	return array;
-}
-
-
-void DCCManager::ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, std::string pFile)
-{
-	std::filesystem::path lOutputPath(mOutputPath);
-	lOutputPath /= std::filesystem::path(pFile).filename();
-	lOutputPath.make_preferred();
-
-	if (ptr && !std::filesystem::exists(lOutputPath))
-	{
-		auto texture_resolver = fmnext::TextureResolver(*ptr);
-		texture_resolver.SaveToPNGFile(lOutputPath.string());
-	}
-};

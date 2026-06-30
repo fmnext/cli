@@ -16,6 +16,8 @@
 #include <rapidjson/ostreamwrapper.h>
 #include <rapidjson/prettywriter.h>
 
+#include <boost/format.hpp>
+
 #ifdef IOS_REF
 #undef  IOS_REF
 #define IOS_REF (*(pManager->GetIOSettings()))
@@ -24,10 +26,10 @@
 #define FT_TOOLKIT_MAJOR_VERSION 1
 #define FT_TOOLKIT_MINOR_VERSION 0
 #define FT_TOOLKIT_PATCH_VERSION 0
-#define FT_TOOLKIT_BUILD_NUMBER  12
+#define FT_TOOLKIT_BUILD_NUMBER  13
 #define FT_TOOLKIT_SCM_BRANCH    "branch-1.0"
-#define FT_TOOLKIT_SCM_TAGS      "release version-12"
-#define FT_TOOLKIT_SCM_DATETIME  "2026-06-08T00:00:00.000Z"
+#define FT_TOOLKIT_SCM_TAGS      "release version-13"
+#define FT_TOOLKIT_SCM_DATETIME  "2026-06-30T00:00:00.000Z"
 
 namespace fmnext
 {
@@ -53,13 +55,20 @@ namespace fmnext
         std::string schema;
         uint32_t type;
     };
+
+    enum ResourceType
+    {
+        NONE,
+        SCENE,
+        BUNDLE
+    };
 }
 
 class DCCManager
 {
 public:
     DCCManager() = default;
-    DCCManager(const std::string& iPath, const std::string& oPath, uint32_t lod = 0, uint32_t geo = 0, uint32_t opt = 0) : mInputPath(iPath), mOutputPath(oPath), m_lod(lod), m_geo(geo), m_opt(opt) {
+    DCCManager(const std::string& iPath, const std::string& oPath, uint32_t lod = 0, uint32_t geo = 0, uint32_t opt = 0, fmnext::ResourceType res = fmnext::ResourceType::NONE) : mInputPath(iPath), mOutputPath(oPath), m_lod(lod), m_geo(geo), m_opt(opt), m_res(res) {
     };
 
 	~DCCManager() = default;
@@ -78,10 +87,13 @@ private:
     std::filesystem::path mInputPath{};
     std::filesystem::path mOutputPath{};
     std::filesystem::path mTextureOutputPath{};
+    std::filesystem::path mMaterialOutputPath{};
     std::filesystem::path mUIOutputPath{};
     std::filesystem::path mUITexturesOutputPath{};
 
     uint32_t m_lod = 0, m_geo = 0, m_opt = 0;
+
+    fmnext::ResourceType m_res;
 
     std::vector<fmnext::ModelItem> list_items;
 
@@ -270,6 +282,20 @@ private:
         return false;
     }
 
+    bool SetupOutputMaterials()
+    {
+        mMaterialOutputPath = std::filesystem::path(mOutputPath);
+        mMaterialOutputPath /= "Materials";
+        mMaterialOutputPath.make_preferred();
+
+        if (!std::filesystem::exists(mMaterialOutputPath))
+        {
+            return std::filesystem::create_directory(mMaterialOutputPath);
+        }
+
+        return false;
+    }
+
     std::string MakeCarRelativePath(const std::string& path) {
         std::string result = "game:/media/cars/";
         result += m_scene->media_name;
@@ -388,7 +414,7 @@ private:
         return DirectX::XMFLOAT3();
     }
 
-    void SetNodeTransformation(FbxNode* pNode, DirectX::XMMATRIX pXMMatrix)
+    void SetNodeTransformation(FbxNode* pNode, const DirectX::XMMATRIX& pXMMatrix)
     {
         DirectX::XMVECTOR outScale, outRotQuat, outTrans;
         DirectX::XMMatrixDecompose(&outScale, &outRotQuat, &outTrans, pXMMatrix);
@@ -405,7 +431,7 @@ private:
 
     FbxMesh* RemoveIsolatedVertices(FbxMesh* pMesh);
     
-    FbxNode* CreateMesh(const std::vector<DirectX::XMFLOAT3>& vertices, const std::vector<uint32_t>& indices, const std::vector<DirectX::XMFLOAT3>& normals, const std::vector<std::vector<DirectX::XMFLOAT2>>& uvs, const std::string& Name, FbxSurfaceMaterial* material, bool useQuads);
+    FbxNode* CreateMesh(const fmnext::Mesh* mesh, const std::string& Name, FbxSurfaceMaterial* material, bool useQuads);
 
     FbxSurfaceLambert* CreateMaterialfromMemory(const std::string& pName, const std::shared_ptr<fmnext::BundleReader::BundleData>& pMaterialBundle)
     {
@@ -641,7 +667,7 @@ private:
             FbxNode* mesh_obj = nullptr;
             FbxSurfaceLambert* material_obj = nullptr;
 
-            mesh_obj = CreateMesh(mesh.vertices, mesh.indices, mesh.normals, mesh.uvs, "ProxyLOD", material_obj, static_cast<fmnext::GeometryType>(m_geo));
+            mesh_obj = CreateMesh(&mesh, "ProxyLOD", material_obj, static_cast<fmnext::GeometryType>(m_geo));
             SetNodeTransformation(mesh_obj, mesh.matrix);
 
             mRootNode->AddChild(mesh_obj);
@@ -991,5 +1017,10 @@ private:
 
     void ExportManufacturerColors();
 
-    void ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, std::string pFile);
+    void ExportThumbnail(std::unique_ptr<fmnext::BundleReader::BundleData> ptr, const std::string& pFile);
+
+    void ExportMaterialData(int bundle_index, const std::string& path);
+
+    bool HandleScene();
+    bool HandleBundle();
 };
