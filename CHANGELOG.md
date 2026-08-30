@@ -6,6 +6,9 @@ Release available for download on [GitHub](https://github.com/fmnext/cli/release
 
 ## Release History
 
+### Aug 30, 2026 (Release 14)
+* remove previous conditional LOD inspection for tires (fix FM23)
+
 ### Jun 30, 2026 (Release 13)
 * enable bunble conversion 
 * fix unexpected FM23 tire behavior
