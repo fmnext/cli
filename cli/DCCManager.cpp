@@ -385,57 +385,54 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 
 					if (data.type == 8) // Tires
 					{
-						if ((m_lod == 0) && data.model->levels_of_detail.LODS || (m_lod >= 1) && !data.model->levels_of_detail.LODS || (m_lod >= 0) && data.model->levels_of_detail.LODS)
+						fmnext::PartLocation direction = DCCManager::GetPartDirection(data.model->bone_name);
+
+						auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo), p_records, 8, direction.end);
+
+						std::string tire_name = "tire_" + DCCManager::GetContainerDirection(data.model->bone_name);
+
+						FbxNode* locatorObj = nullptr;
+
+						if (!resolver.GetMeshes().empty())
 						{
-							fmnext::PartLocation direction = DCCManager::GetPartDirection(data.model->bone_name);
+							auto trs = std::find_if(spindle_transforms.begin(), spindle_transforms.end(), [&](auto& d) { return d.first == data.model->bone_name; });
 
-							auto resolver = fmnext::MeshResolver(data.bundle, m_lod, static_cast<fmnext::GeometryType>(m_geo), p_records, 8, direction.end);
+							locatorObj = CreateLocator(trs->second);
 
-							std::string tire_name = "tire_" + DCCManager::GetContainerDirection(data.model->bone_name);
-
-							FbxNode* locatorObj = nullptr;
-
-							if (!resolver.GetMeshes().empty())
-							{
-								auto trs = std::find_if(spindle_transforms.begin(), spindle_transforms.end(), [&](auto& d) { return d.first == data.model->bone_name; });
-
-								locatorObj = CreateLocator(trs->second);
-
-								locatorObj->SetName(tire_name.c_str());
-							}
-
-							for (const auto& mesh : resolver.GetMeshes())
-							{
-								FbxNode* mesh_obj = nullptr;
-								FbxSurfaceLambert* material_obj = nullptr;
-
-								std::string mesh_name(mesh.name);
-
-								auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
-									return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
-									});
-
-								if (material != std::end(data.bundle->MaterialInstanceBundles))
-								{
-									mesh_name += "_";
-									mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
-								}
-
-								if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
-								{
-									const auto& [key, material_data] = *material_it;
-
-									material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
-								}
-
-								mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-								SetNodeTransformation(mesh_obj, mesh.matrix);
-
-								locatorObj->AddChild(mesh_obj);
-							}
-
-							lodGroupObj->AddChild(locatorObj);
+							locatorObj->SetName(tire_name.c_str());
 						}
+
+						for (const auto& mesh : resolver.GetMeshes())
+						{
+							FbxNode* mesh_obj = nullptr;
+							FbxSurfaceLambert* material_obj = nullptr;
+
+							std::string mesh_name(mesh.name);
+
+							auto material = std::find_if(data.bundle->MaterialInstanceBundles.begin(), data.bundle->MaterialInstanceBundles.end(), [&](auto& mtl) {
+								return std::any_cast<int32_t>(mtl.metadata["Id"]) == mesh.material_index;
+								});
+
+							if (material != std::end(data.bundle->MaterialInstanceBundles))
+							{
+								mesh_name += "_";
+								mesh_name += std::any_cast<std::string>(material->metadata["Name"]);
+							}
+
+							if (auto material_it = data.materials.find(mesh.material_index); material_it != std::end(data.materials))
+							{
+								const auto& [key, material_data] = *material_it;
+
+								material_obj = CreateMaterialfromMemory(std::any_cast<std::string>(material->metadata["Name"]), material_data.instace);
+							}
+
+							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
+							SetNodeTransformation(mesh_obj, mesh.matrix);
+
+							locatorObj->AddChild(mesh_obj);
+						}
+
+						lodGroupObj->AddChild(locatorObj);
 
 						continue;
 					}
