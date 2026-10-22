@@ -938,7 +938,41 @@ FbxNode* DCCManager::CreateMesh(const fmnext::Mesh* mesh, const std::string& Nam
 
 	for (uint32_t i = 0; i < numVertices; ++i)
 	{
-		lElementNormal->GetDirectArray().Add(FbxVector4(mesh->normals[i].x, mesh->normals[i].z, mesh->normals[i].y));
+		lElementNormal->GetDirectArray().Add(FbxVector4(-mesh->normals[i].x, mesh->normals[i].y, mesh->normals[i].z));
+	}
+
+	for (uint32_t i = 0; i < numIndices; i += geometry) //numIndices
+	{
+		lMesh->BeginPolygon(-1, -1, false);
+		{
+			uint32_t v0 = mesh->indices[i + 0];
+			uint32_t v1 = (geometry == 4) ? mesh->indices[i + 1] : mesh->indices[i + 2];
+			uint32_t v2 = (geometry == 4) ? mesh->indices[i + 2] : mesh->indices[i + 1];
+			uint32_t v3 = (geometry == 4) ? mesh->indices[i + 3] : 0xffffffff;
+
+			lMesh->AddPolygon(v0);
+			lMesh->AddPolygon(v1);
+			lMesh->AddPolygon(v2);
+
+			if (v3 != 0xffffffff) {
+				lMesh->AddPolygon(v3);
+			}
+		}
+		lMesh->EndPolygon();
+	}
+
+	const auto& vc = mesh->colors.begin();
+	if (vc != mesh->colors.end())
+	{
+		FbxGeometryElementVertexColor* lElementVertexColor = lMesh->CreateElementVertexColor();
+		lElementVertexColor->SetMappingMode(FbxGeometryElement::eByControlPoint);
+		lElementVertexColor->SetReferenceMode(FbxGeometryElement::eDirect);
+		lElementVertexColor->SetName("VCChannel_0");
+
+		for (uint32_t i = 0; i < numVertices; ++i)
+		{
+			lElementVertexColor->GetDirectArray().Add(FbxColor(vc->at(i).x, vc->at(i).y, vc->at(i).z, vc->at(i).w));
+		}
 	}
 
 	for (uint32_t id = 0; id < static_cast<uint32_t>(mesh->uvs.size()) && !mesh->uvs[id].empty(); ++id)
