@@ -30,26 +30,26 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
     <UseInteloneTBB>false</UseInteloneTBB>
@@ -135,7 +135,7 @@ copy "$(SolutionDir)extern\zip.dll" "$(TargetDir)"</Command>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;FBXSDK_SHARED;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\local\boost_1_91_0;C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.9\include;$(SolutionDir)core;$(SolutionDir)DirectXMesh;$(SolutionDir)DirectXTex;$(SolutionDir)deps;$(SolutionDir)gr\include;$(SolutionDir)gr\gstate;$(SolutionDir)rapidjson\include;$(SolutionDir)sqlite3\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\local\boost_1_92_0;C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.11\include;$(SolutionDir)core;$(SolutionDir)DirectXMesh;$(SolutionDir)DirectXTex;$(SolutionDir)deps;$(SolutionDir)gr\include;$(SolutionDir)gr\gstate;$(SolutionDir)rapidjson\include;$(SolutionDir)sqlite3\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <DebugInformationFormat>None</DebugInformationFormat>
       <Optimization>MaxSpeed</Optimization>
@@ -146,7 +146,7 @@ copy "$(SolutionDir)extern\zip.dll" "$(TargetDir)"</Command>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <AdditionalDependencies>libfbxsdk.lib;libxml2.lib;zlib.lib;sqlite3.lib;granny2_static_x64.lib;gstate_x64.lib;xg.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\local\boost_1_91_0\lib64-msvc-14.3;C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.9\lib\x64\release;$(SolutionDir)deps\lib;$(SolutionDir)gr\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\local\boost_1_92_0\lib64-msvc-14.5;C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.11\lib\x64\release;$(SolutionDir)deps\lib;$(SolutionDir)gr\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>/NODEFAULTLIB:LIBCMT %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
@@ -154,7 +154,7 @@ copy "$(SolutionDir)extern\zip.dll" "$(TargetDir)"</Command>
       </Command>
     </PostBuildEvent>
     <PreBuildEvent>
-      <Command>copy "C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.9\lib\x64\release\libfbxsdk.dll" "$(TargetDir)"
+      <Command>copy "C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.11\lib\x64\release\libfbxsdk.dll" "$(TargetDir)"
 copy "$(SolutionDir)deps\bin\sqlite3.dll" "$(TargetDir)"
 copy "$(SolutionDir)deps\bin\xg.dll" "$(TargetDir)"
 copy "$(SolutionDir)deps\bin\zip.dll" "$(TargetDir)"
@@ -166,6 +166,7 @@ copy "$(SolutionDir)LICENSE" "$(TargetDir)"
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="DCCManager.cpp" />
+    <ClCompile Include="SQLManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\core\core.vcxproj">
