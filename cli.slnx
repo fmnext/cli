@@ -1,0 +1,12 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="cli/cli.vcxproj" Id="542dd1d1-174e-4ceb-a811-2d2df72348bc" />
+  <Project Path="core/core.vcxproj" Id="aca621ac-e026-41b7-acc1-3c31285c283e" />
+  <Project Path="DirectXMesh/DirectXMesh_Desktop_2022_Win10.vcxproj" Id="6857f086-f6fe-4150-9ed7-7446f1c1c220" />
+  <Project Path="DirectXTex/DirectXTex_GXDK_PC_2022.vcxproj" Id="9e4d1c18-9e5e-4b35-83be-74830b9b3c34">
+    <Platform Project="x64" />
+  </Project>
+</Solution>
