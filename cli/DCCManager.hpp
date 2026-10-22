@@ -84,6 +84,8 @@ private:
     FbxNode* mRootNode = nullptr;
     granny_file* m_CharacterFile = nullptr;
 
+    std::vector<FbxNode*> m_joints;
+
     std::filesystem::path mInputPath{};
     std::filesystem::path mOutputPath{};
     std::filesystem::path mTextureOutputPath{};
@@ -96,6 +98,26 @@ private:
     fmnext::ResourceType m_res;
 
     std::vector<fmnext::ModelItem> list_items;
+
+    FbxAMatrix SetFbxMatrix(const DirectX::XMMATRIX& pXMMatrix);
+
+    FbxAMatrix SetFbxMatrix(granny_transform* grannyTransform);
+
+    void SetNodeMatrix(FbxNode* pNode, granny_transform* grannyTransform);
+
+    void SetNodeMatrix(FbxNode* pNode, const DirectX::XMMATRIX& pXMMatrix);
+
+    FbxSkin* CreateSkin();
+
+    void AddBindPose(FbxNode* pMeshNode, FbxNode* pBoneNode);
+
+    void AddMeshToSkin(FbxNode* pBoneNode, FbxNode* pMeshNode, FbxSkin* pSkin);
+
+    void SetAnimKey(FbxAnimCurve* myAnimCurve, float pCurrentTime, int lKeyIndex, float value);
+
+    void AddMeshGroupToSkin(const std::string& pBoneName, FbxNode* pMeshNode, const DirectX::XMMATRIX& pXMMatrix);
+
+    FbxNode* CreateCustomBone(const std::string& pBoneName);
 
     const std::string GetContainerDirection(const std::string& container)
     {
@@ -387,7 +409,7 @@ private:
         // create a FbxNode
         FbxNode* lNode = FbxNode::Create(mManager, "");
 
-        SetNodeTransformation(lNode, xmMatrix);
+        SetNodeMatrix(lNode, xmMatrix);
 
         return lNode;
     }
@@ -674,10 +696,10 @@ private:
         }
     }
 
+
     void HandleSkeleton(const std::vector<fmnext::BundleReader::Bones>& skeleton)
     {
-        std::vector<FbxNode*> joints;
-        joints.reserve(skeleton.size());
+        m_joints.reserve(skeleton.size());
 
         for (size_t i = 0; i < skeleton.size(); ++i)
         {
@@ -690,32 +712,30 @@ private:
             FbxNode* lSkeletonJoint = FbxNode::Create(mScene, Name.c_str());
             lSkeletonJoint->SetNodeAttribute(lSkeletonAttribute);
 
-            SetNodeTransformation(lSkeletonJoint, skeleton[i].transform);
+            SetNodeMatrix(lSkeletonJoint, skeleton[i].transform);
 
-            joints.push_back(lSkeletonJoint);
+            m_joints.push_back(lSkeletonJoint);
 
             if (skeleton[i].parent_index == GrannyNoParentBone)
             {
-                mRootNode->AddChild(joints[i]);
+                mRootNode->AddChild(m_joints[i]);
             }
 
             if (skeleton[i].parent_index != GrannyNoParentBone)
             {
                 int32_t ParentIndex = skeleton[i].parent_index;
 
-                joints[ParentIndex]->AddChild(joints[i]);
+                m_joints[ParentIndex]->AddChild(m_joints[i]);
             }
 
         }
     }
 
-
     void HandleSkeleton(granny_skeleton* Skeleton)
     {
         std::string skel_name(Skeleton->Name);
 
-        std::vector<FbxNode*> joints;
-        joints.reserve(Skeleton->BoneCount);
+        m_joints.reserve(Skeleton->BoneCount);
 
         for (size_t i = 0; i < Skeleton->BoneCount; ++i)
         {
@@ -727,26 +747,21 @@ private:
 
             FbxNode* lSkeletonJoint = FbxNode::Create(mScene, Name.c_str());
             lSkeletonJoint->SetNodeAttribute(lSkeletonAttribute);
-            lSkeletonJoint->LclTranslation.Set(FbxVector4(LocalTransform.Position[0], LocalTransform.Position[2], LocalTransform.Position[1]));
 
-            DirectX::XMVECTOR outRotQuat_updated = DirectX::XMVectorSet(LocalTransform.Orientation[0], LocalTransform.Orientation[2], LocalTransform.Orientation[1], LocalTransform.Orientation[3]);
-            DirectX::XMFLOAT3 rotation = XMQuaternionToEuler(DirectX::XMMatrixRotationQuaternion(outRotQuat_updated));
+            SetNodeMatrix(lSkeletonJoint, &LocalTransform);
 
-            lSkeletonJoint->LclRotation.Set(FbxVector4(rotation.x, rotation.y, rotation.z));
-            //lSkeletonJoint->LclScaling.Set( FbxVector4( static_cast<double>(*LocalTransform.ScaleShear[0]), static_cast<double>(*LocalTransform.ScaleShear[2]), static_cast<double>(*LocalTransform.ScaleShear[1]) ) );
-
-            joints.push_back(lSkeletonJoint);
+            m_joints.push_back(lSkeletonJoint);
 
             if (Skeleton->Bones[i].ParentIndex == GrannyNoParentBone)
             {
-                mRootNode->AddChild(joints[i]);
+                mRootNode->AddChild(m_joints[i]);
             }
 
             if (Skeleton->Bones[i].ParentIndex != GrannyNoParentBone)
             {
                 granny_int32 ParentIndex = Skeleton->Bones[i].ParentIndex;
 
-                joints[ParentIndex]->AddChild(joints[i]);
+                m_joints[ParentIndex]->AddChild(m_joints[i]);
             }
         }
     }
@@ -901,16 +916,15 @@ private:
                         GrannyEvaluateCurveAtT(3, false, false, PositionCurve, false, Animation->Duration, CurrentTime, EvalResult.Position, GrannyCurveIdentityPosition);
                         GrannyEvaluateCurveAtT(4, false, false, OrientationCurve, false, Animation->Duration, CurrentTime, EvalResult.Orientation, GrannyCurveIdentityOrientation);
 
-                        setKey(lTranXCurve, CurrentTime, CurrentFrame, EvalResult.Position[0]);
-                        setKey(lTranYCurve, CurrentTime, CurrentFrame, EvalResult.Position[2]);
-                        setKey(lTranZCurve, CurrentTime, CurrentFrame, EvalResult.Position[1]);
+                        FbxAMatrix matrix = SetFbxMatrix(&EvalResult);
 
-                        DirectX::XMVECTOR outRotQuat_updated = DirectX::XMVectorSet(EvalResult.Orientation[0], EvalResult.Orientation[2], EvalResult.Orientation[1], EvalResult.Orientation[3]);
-                        DirectX::XMFLOAT3 rotation = XMQuaternionToEuler(DirectX::XMMatrixRotationQuaternion(outRotQuat_updated));
+                        SetAnimKey(lTranXCurve, CurrentTime, CurrentFrame, static_cast<float>(matrix.GetT()[0]));
+                        SetAnimKey(lTranYCurve, CurrentTime, CurrentFrame, static_cast<float>(matrix.GetT()[1]));
+                        SetAnimKey(lTranZCurve, CurrentTime, CurrentFrame, static_cast<float>(matrix.GetT()[2]));
 
-                        setKey(lRotXCurve, CurrentTime, CurrentFrame, rotation.x);
-                        setKey(lRotYCurve, CurrentTime, CurrentFrame, rotation.y);
-                        setKey(lRotZCurve, CurrentTime, CurrentFrame, rotation.z);
+                        SetAnimKey(lRotXCurve, CurrentTime, CurrentFrame, static_cast<float>(matrix.GetR()[0]));
+                        SetAnimKey(lRotYCurve, CurrentTime, CurrentFrame, static_cast<float>(matrix.GetR()[1]));
+                        SetAnimKey(lRotZCurve, CurrentTime, CurrentFrame, static_cast<float>(matrix.GetR()[2]));
 
                         //printf("Track: %s, Frame: %i: Position[% .3f, % .3f, % .3f]\n", TrackGroup->TransformTracks[TrackIndex].Name, CurrentFrame, EvalResult.Position[0], EvalResult.Position[1], EvalResult.Position[2]);
                         //printf("Time: %.3f: Rotation[% .3f, % .3f, % .3f, % .3f]\n", CurrentTime, EvalResult.Orientation[0], EvalResult.Orientation[1], EvalResult.Orientation[2], EvalResult.Orientation[3]);

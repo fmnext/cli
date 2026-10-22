@@ -64,6 +64,148 @@ std::string DCCManager::GetVersionString()
 	return version;
 }
 
+FbxAMatrix DCCManager::SetFbxMatrix(const DirectX::XMMATRIX& pXMMatrix)
+{
+	DirectX::XMVECTOR outScale, outRotQuat, outTrans;
+	DirectX::XMMatrixDecompose(&outScale, &outRotQuat, &outTrans, pXMMatrix);
+
+	FbxQuaternion q(FbxQuaternion(-DirectX::XMVectorGetX(outRotQuat), DirectX::XMVectorGetY(outRotQuat), DirectX::XMVectorGetZ(outRotQuat), DirectX::XMVectorGetW(outRotQuat)));
+	q.Normalize();
+	q.Inverse();
+
+	FbxAMatrix matrix;
+	matrix.SetIdentity();
+	matrix.SetT(FbxVector4(-DirectX::XMVectorGetX(outTrans), DirectX::XMVectorGetY(outTrans), DirectX::XMVectorGetZ(outTrans)));
+	matrix.SetQ(q);
+	//matrix.SetS(FbxVector4(DirectX::XMVectorGetX(outScale), DirectX::XMVectorGetY(outScale), DirectX::XMVectorGetZ(outScale)));
+
+	return matrix;
+}
+
+FbxAMatrix DCCManager::SetFbxMatrix(granny_transform* grannyTransform)
+{
+	// granny_transform = Position[3], Orientation[4], ScaleShear[3]
+	FbxQuaternion q(FbxQuaternion(-grannyTransform->Orientation[0], grannyTransform->Orientation[1], grannyTransform->Orientation[2], grannyTransform->Orientation[3]));
+	q.Normalize();
+	q.Inverse();
+
+	FbxAMatrix matrix;
+	matrix.SetIdentity();
+	matrix.SetT(FbxVector4(-grannyTransform->Position[0], grannyTransform->Position[1], grannyTransform->Position[2]));
+	matrix.SetQ(q);
+
+	return matrix;
+}
+
+void DCCManager::SetNodeMatrix(FbxNode* pNode, granny_transform* grannyTransform)
+{
+	FbxAMatrix matrix = SetFbxMatrix(grannyTransform);
+
+	pNode->LclTranslation.Set(matrix.GetT());
+	pNode->LclRotation.Set(matrix.GetR());
+}
+
+
+void DCCManager::SetNodeMatrix(FbxNode* pNode, const DirectX::XMMATRIX& pXMMatrix)
+{
+	FbxAMatrix matrix = SetFbxMatrix(pXMMatrix);
+
+	pNode->LclTranslation.Set(matrix.GetT());
+	pNode->LclRotation.Set(matrix.GetR());
+}
+
+FbxSkin* DCCManager::CreateSkin()
+{
+	FbxSkin* skin = FbxSkin::Create(mScene, "");
+	skin->SetSkinningType(FbxSkin::eLinear);
+
+	return skin;
+}
+
+void DCCManager::AddBindPose(FbxNode* pMeshNode, FbxNode* pBoneNode)
+{
+	FbxPose* pose = FbxPose::Create(mScene, "");
+	pose->SetIsBindPose(true);
+	pose->Add(pMeshNode, FbxMatrix(pMeshNode->EvaluateGlobalTransform()));
+	pose->Add(pBoneNode, FbxMatrix(pBoneNode->EvaluateGlobalTransform()));
+
+	mScene->AddPose(pose);
+}
+
+void DCCManager::AddMeshToSkin(FbxNode* pBoneNode, FbxNode* pMeshNode, FbxSkin* pSkin)
+{
+	FbxCluster* cluster = FbxCluster::Create(mScene, "");
+	cluster->SetLink(pBoneNode);
+	cluster->SetLinkMode(FbxCluster::eNormalize);
+
+	cluster->SetTransformMatrix(pMeshNode->EvaluateGlobalTransform());
+	cluster->SetTransformLinkMatrix(pBoneNode->EvaluateGlobalTransform());
+
+	for (int pointIndex = 0; pointIndex < pMeshNode->GetMesh()->GetControlPointsCount(); ++pointIndex)
+	{
+		cluster->AddControlPointIndex(pointIndex, 1.0f);
+	}
+
+	if (cluster->GetControlPointIndicesCount() > 0)
+	{
+		if (!pSkin->AddCluster(cluster))
+		{
+			printf("Failed to add skin cluster for mesh %s \n", pMeshNode->GetName());
+		}
+	}
+
+	pMeshNode->GetMesh()->AddDeformer(pSkin);
+
+	AddBindPose(pMeshNode, pBoneNode);
+}
+
+void DCCManager::SetAnimKey(FbxAnimCurve* myAnimCurve, float pCurrentTime, int lKeyIndex, float value)
+{
+	FbxTime lTime{};
+	myAnimCurve->KeyModifyBegin();
+
+	lTime.SetSecondDouble(pCurrentTime);
+	lKeyIndex = myAnimCurve->KeyAdd(lTime);
+	myAnimCurve->KeySet(lKeyIndex, lTime, value, FbxAnimCurveDef::eInterpolationLinear);
+
+	myAnimCurve->KeyModifyEnd();
+}
+
+void DCCManager::AddMeshGroupToSkin(const std::string& pBoneName, FbxNode* pGroupNode, const DirectX::XMMATRIX& pXMMatrix)
+{
+	FbxNode* lBoneNode = mScene->FindNodeByName(FbxString(pBoneName.c_str()));
+	if (lBoneNode != nullptr)
+	{
+		SetNodeMatrix(lBoneNode, pXMMatrix);
+
+		for (int childIndex = 0; childIndex < pGroupNode->GetChildCount(); ++childIndex)
+		{
+			FbxSkin* lSkin = CreateSkin(); // backbone for all clusters on this mesh
+			FbxNode* lMeshNode = pGroupNode->GetChild(childIndex);
+
+			AddMeshToSkin(lBoneNode, lMeshNode, lSkin);
+		}
+	}
+}
+
+FbxNode* DCCManager::CreateCustomBone(const std::string& pBoneName)
+{
+	FbxNode* lBoneNode = mScene->FindNodeByName(FbxString("root"));
+
+	FbxSkeleton* lSkeletonAttribute = FbxSkeleton::Create(mScene, pBoneName.c_str());
+	lSkeletonAttribute->SetSkeletonType(FbxSkeleton::eLimbNode);
+
+	FbxNode* lSkeletonJoint = FbxNode::Create(mScene, pBoneName.c_str());
+	lSkeletonJoint->SetNodeAttribute(lSkeletonAttribute);
+
+	if (lBoneNode != nullptr)
+	{
+		lBoneNode->AddChild(lSkeletonJoint);
+	}
+
+	return lSkeletonJoint;
+}
+
 void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 {
 	std::unordered_map<std::string, DirectX::XMMATRIX> suspension_transforms;
@@ -79,6 +221,12 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 	std::unordered_map<std::string, FbxNode*> calipers;
 
 	std::unordered_map<std::string, DirectX::XMMATRIX> spindle_transforms;
+
+	std::unordered_map<std::string, DirectX::XMMATRIX> tire_transforms;
+	std::unordered_map<std::string, FbxNode*> tires;
+
+	std::unordered_map<std::string, DirectX::XMMATRIX> wheel_transforms;
+	std::unordered_map<std::string, FbxNode*> wheels;
 
 	int color_override = 0, upgrade_level = 0;
 
@@ -322,11 +470,13 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 									}
 
 									mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-									SetNodeTransformation(mesh_obj, mesh.matrix);
+									SetNodeMatrix(mesh_obj, mesh.matrix);
 
 									locatorObj->AddChild(mesh_obj);
 								}
 
+								wheels.emplace(data.model->bone_name, locatorObj);
+								wheel_transforms.emplace(data.model->bone_name, spidle_transform);
 
 								lodGroupObj->AddChild(locatorObj);
 							}
@@ -341,10 +491,14 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 
 							FbxNode* locatorObj = nullptr;
 
+							DirectX::XMMATRIX spidle_transform{};
+
 							if (!resolver.GetMeshes().empty())
 							{
 								locatorObj = CreateLocator(data.model->transform);
 								locatorObj->SetName(wheel_name.c_str());
+
+								spidle_transform = DirectX::XMMATRIX(data.model->transform);
 							}
 
 							for (const auto& mesh : resolver.GetMeshes())
@@ -372,10 +526,13 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 								}
 
 								mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-								SetNodeTransformation(mesh_obj, mesh.matrix);
+								SetNodeMatrix(mesh_obj, mesh.matrix);
 
 								locatorObj->AddChild(mesh_obj);
 							}
+
+							wheels.emplace(data.model->bone_name, locatorObj);
+							wheel_transforms.emplace(data.model->bone_name, spidle_transform);
 
 							lodGroupObj->AddChild(locatorObj);
 						}
@@ -393,6 +550,8 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 
 						FbxNode* locatorObj = nullptr;
 
+						DirectX::XMMATRIX tire_transform{};
+
 						if (!resolver.GetMeshes().empty())
 						{
 							auto trs = std::find_if(spindle_transforms.begin(), spindle_transforms.end(), [&](auto& d) { return d.first == data.model->bone_name; });
@@ -400,6 +559,8 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 							locatorObj = CreateLocator(trs->second);
 
 							locatorObj->SetName(tire_name.c_str());
+
+							tire_transform = DirectX::XMMATRIX(trs->second);
 						}
 
 						for (const auto& mesh : resolver.GetMeshes())
@@ -427,10 +588,13 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 							}
 
 							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-							SetNodeTransformation(mesh_obj, mesh.matrix);
+							SetNodeMatrix(mesh_obj, mesh.matrix);
 
 							locatorObj->AddChild(mesh_obj);
 						}
+
+						tires.emplace(tire_name, locatorObj);
+						tire_transforms.emplace(tire_name, tire_transform);
 
 						lodGroupObj->AddChild(locatorObj);
 
@@ -471,7 +635,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 							}
 
 							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-							SetNodeTransformation(mesh_obj, mesh.matrix);
+							SetNodeMatrix(mesh_obj, mesh.matrix);
 
 							locatorObj->AddChild(mesh_obj);
 						}
@@ -521,7 +685,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 							}
 
 							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-							SetNodeTransformation(mesh_obj, mesh.matrix);
+							SetNodeMatrix(mesh_obj, mesh.matrix);
 
 							locatorObj->AddChild(mesh_obj);
 						}
@@ -601,7 +765,7 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 							}
 
 							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-							SetNodeTransformation(mesh_obj, mesh.matrix);
+							SetNodeMatrix(mesh_obj, mesh.matrix);
 
 							locatorObj->AddChild(mesh_obj);
 						}
@@ -709,7 +873,49 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 							}
 
 							mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-							SetNodeTransformation(mesh_obj, mesh.matrix);
+							SetNodeMatrix(mesh_obj, mesh.matrix);
+
+
+							FbxSkin* lSkin = CreateSkin(); // backbone for all clusters on this mesh
+
+							std::string modelName = std::filesystem::path(data.model->path).stem().string();
+
+							if (strcmp(modelName.c_str(), "wingmirrorr_a") == 0)
+							{
+								//boneMirrorR_001
+								FbxNode* lBoneNode = mScene->FindNodeByName(FbxString("boneMirrorR_001"));
+
+								AddMeshToSkin(lBoneNode, mesh_obj, lSkin);
+							}
+
+							if (strcmp(modelName.c_str(), "wingmirrorl_a") == 0)
+							{
+								//boneMirrorL_001
+								FbxNode* lBoneNode = mScene->FindNodeByName(FbxString("boneMirrorL_001"));
+
+								AddMeshToSkin(lBoneNode, mesh_obj, lSkin);
+							}
+
+							const auto& lBoneNode = std::find_if(m_joints.begin(), m_joints.end(), [&](auto it) { return it->GetNameOnly() == mesh.bone_name.c_str(); });
+							if (lBoneNode != std::end(m_joints))
+							{
+								if (std::distance(m_joints.begin(), lBoneNode) > 1)
+								{
+									AddMeshToSkin(*lBoneNode, mesh_obj, lSkin);
+
+									if (strcmp(modelName.c_str(), "overheadconsole_a") == 0)
+									{
+										//continue;
+									}
+
+									//std::cout << modelName.c_str() << " bone " << mesh.bone_name << " \n";
+								} 
+
+								if (std::distance(m_joints.begin(), lBoneNode) <= 1)
+								{
+									AddMeshToSkin(*lBoneNode, mesh_obj, lSkin);
+								}
+							}
 
 
 							locatorObj->AddChild(mesh_obj);
@@ -724,12 +930,44 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 			mRootNode->AddChild(lodGroupObj);
 		}
 
+		for (const auto& [key, obj] : tires)
+		{
+			if (auto transform = tire_transforms.find(key); transform != tire_transforms.end())
+			{
+				std::string lBoneName = "root_boneTire";
+				lBoneName += DCCManager::GetContainerDirection(key);
+
+				FbxNode* lBoneNode = CreateCustomBone(lBoneName);
+
+				SetNodeMatrix(lBoneNode, transform->second);
+				AddMeshGroupToSkin(lBoneName, obj, transform->second);
+			}
+		}
+
+		for (const auto& [key, obj] : wheels)
+		{
+			if (auto transform = wheel_transforms.find(key); transform != wheel_transforms.end())
+			{
+				std::string lBoneName = "root_boneWheel";
+				lBoneName += DCCManager::GetContainerDirection(key);
+
+				FbxNode* lBoneNode = CreateCustomBone(lBoneName);
+
+				SetNodeMatrix(lBoneNode, transform->second);
+				AddMeshGroupToSkin(lBoneName, obj, transform->second);
+			}
+		}
 
 		for (const auto& [key, obj] : suspensions)
 		{
 			if (auto transform = suspension_transforms.find(key); transform != suspension_transforms.end())
 			{
-				SetNodeTransformation(obj, transform->second);
+				SetNodeMatrix(obj, transform->second);
+
+				std::string lBoneName = "controlArm_";
+				lBoneName += DCCManager::GetContainerDirection(key);
+
+				AddMeshGroupToSkin(lBoneName, obj, transform->second);
 
 				//MGlobal::displayInfo("Suspensions found!");
 			}
@@ -756,7 +994,13 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 				{
 					brake_transform += (translate_x * spindle_transforms[spindle_key]);
 
-					SetNodeTransformation(rotors[spindle_key], brake_transform);
+					SetNodeMatrix(rotors[spindle_key], brake_transform);
+
+					std::string lboneName = "rotor";
+					lboneName += DCCManager::GetContainerDirection(key);
+					lboneName += "_center";
+
+					AddMeshGroupToSkin(lboneName, rotors[spindle_key], brake_transform);
 				}
 
 				caliper_local_translate = DirectX::XMVectorSet(offset->second, DirectX::XMVectorGetY(caliper_bone.r[3]) - DirectX::XMVectorGetY(rotor_bone.r[3]), DirectX::XMVectorGetZ(caliper_bone.r[3]) - DirectX::XMVectorGetZ(rotor_bone.r[3]), 1.f);
@@ -781,7 +1025,12 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 				{
 					caliper_transform += (caliper_local_transform * brake_transform);
 
-					SetNodeTransformation(obj, caliper_transform);
+					SetNodeMatrix(obj, caliper_transform);
+
+					std::string lboneName = "hub";
+					lboneName += DCCManager::GetContainerDirection(key);
+
+					AddMeshGroupToSkin(lboneName, obj, caliper_transform);
 				}
 
 				//MGlobal::displayInfo("rotor_center_offset found!");
@@ -928,7 +1177,7 @@ FbxNode* DCCManager::CreateMesh(const fmnext::Mesh* mesh, const std::string& Nam
 
 	for (uint32_t i = 0; i < numVertices; ++i)
 	{
-		lControlPoints[i] = FbxVector4(mesh->vertices[i].x, mesh->vertices[i].z, mesh->vertices[i].y);
+		lControlPoints[i] = FbxVector4(-mesh->vertices[i].x, mesh->vertices[i].y, mesh->vertices[i].z);
 	}
 
 	FbxGeometryElementNormal* lElementNormal = lMesh->CreateElementNormal();
@@ -975,6 +1224,7 @@ FbxNode* DCCManager::CreateMesh(const fmnext::Mesh* mesh, const std::string& Nam
 		}
 	}
 
+
 	for (uint32_t id = 0; id < static_cast<uint32_t>(mesh->uvs.size()) && !mesh->uvs[id].empty(); ++id)
 	{
 		// UVs Set {ID}
@@ -1005,27 +1255,6 @@ FbxNode* DCCManager::CreateMesh(const fmnext::Mesh* mesh, const std::string& Nam
 		{
 			meshUV->GetDirectArray().Add(FbxVector2(mesh->uvs[id][i].x, 1 - mesh->uvs[id][i].y));
 		}
-	}
-
-
-	for (uint32_t i = 0; i < numIndices; i += geometry) //numIndices
-	{
-		lMesh->BeginPolygon(-1, -1, false);
-		{
-			uint32_t v0 = mesh->indices[i + 0];
-			uint32_t v1 = (geometry == 4) ? mesh->indices[i + 1] : mesh->indices[i + 2];
-			uint32_t v2 = (geometry == 4) ? mesh->indices[i + 2] : mesh->indices[i + 1];
-			uint32_t v3 = (geometry == 4) ? mesh->indices[i + 3] : 0xffffffff;
-
-			lMesh->AddPolygon(v0);
-			lMesh->AddPolygon(v1);
-			lMesh->AddPolygon(v2);
-
-			if (v3 != 0xffffffff) {
-				lMesh->AddPolygon(v3);
-			}
-		}
-		lMesh->EndPolygon();
 	}
 
 	lMesh->BuildMeshEdgeArray();
@@ -2252,7 +2481,7 @@ bool DCCManager::HandleScene()
 
 	//FbxAxisSystem SceneAxisSystem = mScene->GetGlobalSettings().GetAxisSystem();
 
-	//FbxAxisSystem AxisSystem(FbxAxisSystem::eMax);
+	//FbxAxisSystem AxisSystem(FbxAxisSystem::eMayaYUp);
 	//FbxSystemUnit UnitSystem(FbxSystemUnit::mm);
 
 	//AxisSystem.ConvertScene(mScene);
@@ -2305,7 +2534,7 @@ bool DCCManager::HandleBundle()
 			}
 
 			mesh_obj = CreateMesh(&mesh, mesh_name, material_obj, static_cast<fmnext::GeometryType>(m_geo));
-			SetNodeTransformation(mesh_obj, mesh.matrix);
+			SetNodeMatrix(mesh_obj, mesh.matrix);
 
 			mRootNode->AddChild(mesh_obj);
 		}
