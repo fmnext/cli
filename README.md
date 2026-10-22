@@ -9,7 +9,7 @@ Toolkit to translate ForzaTech 3D assets (.zip, .modelbin) without any additiona
 * Textures extraction/conversion
 * Material extraction/conversion
 * Manufacturer colors extraction/conversion
-* Full animation support when available
+* Full animation track support
 * Full upgrade support
 * Fast data translation
 * Quad and tri mesh support
@@ -35,9 +35,9 @@ Necessary workloads
 
 ## Requirements
 1. [Git](https://git-scm.com/)
-2. [Visual Studio 2022](https://aka.ms/vs/17/release/vs_enterprise.exe)
-3. [Autodesk FBX SDK 2020.3.9 VS2022](https://aps.autodesk.com/developer/overview/fbx-sdk)
-4. [Boost 1.91.0](https://archives.boost.io/release/1.91.0/binaries/)
+2. [Visual Studio 2026](https://aka.ms/vs/18/Stable/vs_professional.exe)
+3. [Autodesk FBX SDK 2020.3.11 VS2022](https://aps.autodesk.com/developer/overview/fbx-sdk)
+4. [Boost 1.92.0](https://archives.boost.io/release/1.92.0/binaries/)
 
 ## Clone
 ```
@@ -46,9 +46,14 @@ git clone https://github.com/fmnext/cli.git --recursive
 
 ## Build
 * Install requirements.
-* Open main solution `cli.sln`.
+* Open main solution `cli.slnx`.
 * On the toolbar, choose Release.
 * Right sidebar, RMB the solution > Build Solution.
+
+## Usage
+```
+.\cli --input "path\to\NUL_Car_00.zip" --output "path\to\output\folder" --lod 0 --geo 0 --opt 0
+```
 
 ## Credits
 * All research archived on this project is the solely result of [Doliman100's](https://github.com/Doliman100) work.
@@ -62,7 +67,7 @@ git clone https://github.com/fmnext/cli.git --recursive
 The inclusion of Forza's logo, products, or services in any materials or content does not imply endorsement or affiliation with Microsoft Corporation, unless specifically stated.
 
 ### Notices
-All content and source code for this project are subject to the terms of the [GPL License](https://).
+All content and source code for this project are subject to the terms of the [GPL License](https://github.com/fmnext/cli?tab=GPL-3.0-1-ov-file).
 
 ### Trademarks
 
