@@ -13,6 +13,7 @@ Toolkit to translate ForzaTech 3D assets (.zip, .modelbin) without any additiona
 * Full upgrade support
 * Fast data translation
 * Quad and tri mesh support
+* Dual axis system support
 
 ### Supported games
 * Forza Motorsport 5
@@ -27,7 +28,7 @@ Toolkit to translate ForzaTech 3D assets (.zip, .modelbin) without any additiona
 
 ## Project setup and build
 
-This code is designed to build with Visual Studio 2022, Visual Studio 2026 or later. Use of the Windows 11 April 2025 Update SDK (22621) or later is required for Visual Studio.
+This code is designed to build with Visual Studio 2022, Visual Studio 2026 or later. Use of the latest Windows 11 SDK may be required.
 
 Necessary workloads
 * Desktop development with C++
@@ -52,7 +53,7 @@ git clone https://github.com/fmnext/cli.git --recursive
 
 ## Usage
 ```
-.\cli --input "path\to\NUL_Car_00.zip" --output "path\to\output\folder" --lod 0 --geo 0 --opt 0
+.\cli --input "path\to\NUL_Car_00.zip" --output "path\to\output\folder" --lod 0 --geo 0 --opt 0 --axis 0
 ```
 
 ## Credits
