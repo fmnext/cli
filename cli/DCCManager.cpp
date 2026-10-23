@@ -74,14 +74,14 @@ FbxAMatrix DCCManager::SetFbxMatrix(const DirectX::XMMATRIX& pXMMatrix)
 	{
 		case fmnext::YUp:
 		{
-	FbxQuaternion q(FbxQuaternion(-DirectX::XMVectorGetX(outRotQuat), DirectX::XMVectorGetY(outRotQuat), DirectX::XMVectorGetZ(outRotQuat), DirectX::XMVectorGetW(outRotQuat)));
-	q.Normalize();
-	q.Inverse();
+			FbxQuaternion q(FbxQuaternion(-DirectX::XMVectorGetX(outRotQuat), DirectX::XMVectorGetY(outRotQuat), DirectX::XMVectorGetZ(outRotQuat), DirectX::XMVectorGetW(outRotQuat)));
+			q.Normalize();
+			q.Inverse();
 
-	matrix.SetIdentity();
-	matrix.SetT(FbxVector4(-DirectX::XMVectorGetX(outTrans), DirectX::XMVectorGetY(outTrans), DirectX::XMVectorGetZ(outTrans)));
-	matrix.SetQ(q);
-	//matrix.SetS(FbxVector4(DirectX::XMVectorGetX(outScale), DirectX::XMVectorGetY(outScale), DirectX::XMVectorGetZ(outScale)));
+			matrix.SetIdentity();
+			matrix.SetT(FbxVector4(-DirectX::XMVectorGetX(outTrans), DirectX::XMVectorGetY(outTrans), DirectX::XMVectorGetZ(outTrans)));
+			matrix.SetQ(q);
+			//matrix.SetS(FbxVector4(DirectX::XMVectorGetX(outScale), DirectX::XMVectorGetY(outScale), DirectX::XMVectorGetZ(outScale)));
 
 			break;
 		}
@@ -111,13 +111,13 @@ FbxAMatrix DCCManager::SetFbxMatrix(granny_transform* grannyTransform)
 	{
 	case fmnext::YUp:
 	{
-	FbxQuaternion q(FbxQuaternion(-grannyTransform->Orientation[0], grannyTransform->Orientation[1], grannyTransform->Orientation[2], grannyTransform->Orientation[3]));
-	q.Normalize();
-	q.Inverse();
+		FbxQuaternion q(FbxQuaternion(-grannyTransform->Orientation[0], grannyTransform->Orientation[1], grannyTransform->Orientation[2], grannyTransform->Orientation[3]));
+		q.Normalize();
+		q.Inverse();
 
-	matrix.SetIdentity();
-	matrix.SetT(FbxVector4(-grannyTransform->Position[0], grannyTransform->Position[1], grannyTransform->Position[2]));
-	matrix.SetQ(q);
+		matrix.SetIdentity();
+		matrix.SetT(FbxVector4(-grannyTransform->Position[0], grannyTransform->Position[1], grannyTransform->Position[2]));
+		matrix.SetQ(q);
 
 		break;
 	}
@@ -928,8 +928,8 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 								FbxNode* lBoneNode = mScene->FindNodeByName(FbxString("boneMirrorR_001"));
 								if (lBoneNode != nullptr)
 								{
-								AddMeshToSkin(lBoneNode, mesh_obj, lSkin);
-							}
+									AddMeshToSkin(lBoneNode, mesh_obj, lSkin);
+								}
 							}
 
 							if (strcmp(modelName.c_str(), "wingmirrorl_a") == 0)
@@ -938,8 +938,8 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 								FbxNode* lBoneNode = mScene->FindNodeByName(FbxString("boneMirrorL_001"));
 								if (lBoneNode != nullptr)
 								{
-								AddMeshToSkin(lBoneNode, mesh_obj, lSkin);
-							}
+									AddMeshToSkin(lBoneNode, mesh_obj, lSkin);
+								}
 							}
 
 							const auto& lBoneNode = std::find_if(m_joints.begin(), m_joints.end(), [&](auto it) { return it->GetNameOnly() == mesh.bone_name.c_str(); });
@@ -948,15 +948,21 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 								if (std::distance(m_joints.begin(), lBoneNode) >= 1)
 								{
 									AddMeshToSkin(*lBoneNode, mesh_obj, lSkin);
-									}
 								} 
-
-								if (std::distance(m_joints.begin(), lBoneNode) <= 1)
-								{
-									AddMeshToSkin(*lBoneNode, mesh_obj, lSkin);
-								}
 							}
 
+							// force all <root> influenced meshes to bind root bone instead GrannyRootBone
+							if (strcmp(mesh.bone_name.c_str(), "<root>") == 0)
+							{
+								FbxNode* lBoneNode = mScene->FindNodeByName(FbxString("root"));
+								if (mesh_obj->GetMesh()->GetDeformerCount() == 0)
+								{
+									if (lBoneNode != nullptr)
+									{
+										AddMeshToSkin(lBoneNode, mesh_obj, lSkin);
+									}
+								}
+							}
 
 							locatorObj->AddChild(mesh_obj);
 						}
