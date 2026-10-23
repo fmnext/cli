@@ -150,7 +150,7 @@ void DCCManager::AddMeshToSkin(FbxNode* pBoneNode, FbxNode* pMeshNode, FbxSkin* 
 	{
 		if (!pSkin->AddCluster(cluster))
 		{
-			printf("Failed to add skin cluster for mesh %s \n", pMeshNode->GetName());
+			printf("Failed to add skin cluster to mesh %s \n", pMeshNode->GetName());
 		}
 	}
 
