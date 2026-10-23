@@ -926,31 +926,29 @@ void DCCManager::Initialize(std::shared_ptr<fmnext::DataBaseRecords> p_records)
 							{
 								//boneMirrorR_001
 								FbxNode* lBoneNode = mScene->FindNodeByName(FbxString("boneMirrorR_001"));
-
+								if (lBoneNode != nullptr)
+								{
 								AddMeshToSkin(lBoneNode, mesh_obj, lSkin);
+							}
 							}
 
 							if (strcmp(modelName.c_str(), "wingmirrorl_a") == 0)
 							{
 								//boneMirrorL_001
 								FbxNode* lBoneNode = mScene->FindNodeByName(FbxString("boneMirrorL_001"));
-
+								if (lBoneNode != nullptr)
+								{
 								AddMeshToSkin(lBoneNode, mesh_obj, lSkin);
+							}
 							}
 
 							const auto& lBoneNode = std::find_if(m_joints.begin(), m_joints.end(), [&](auto it) { return it->GetNameOnly() == mesh.bone_name.c_str(); });
 							if (lBoneNode != std::end(m_joints))
 							{
-								if (std::distance(m_joints.begin(), lBoneNode) > 1)
+								if (std::distance(m_joints.begin(), lBoneNode) >= 1)
 								{
 									AddMeshToSkin(*lBoneNode, mesh_obj, lSkin);
-
-									if (strcmp(modelName.c_str(), "overheadconsole_a") == 0)
-									{
-										//continue;
 									}
-
-									//std::cout << modelName.c_str() << " bone " << mesh.bone_name << " \n";
 								} 
 
 								if (std::distance(m_joints.begin(), lBoneNode) <= 1)
