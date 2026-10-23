@@ -69,6 +69,11 @@ FbxAMatrix DCCManager::SetFbxMatrix(const DirectX::XMMATRIX& pXMMatrix)
 	DirectX::XMVECTOR outScale, outRotQuat, outTrans;
 	DirectX::XMMatrixDecompose(&outScale, &outRotQuat, &outTrans, pXMMatrix);
 
+	FbxAMatrix matrix;
+	switch (m_axis)
+	{
+		case fmnext::YUp:
+		{
 	FbxQuaternion q(FbxQuaternion(-DirectX::XMVectorGetX(outRotQuat), DirectX::XMVectorGetY(outRotQuat), DirectX::XMVectorGetZ(outRotQuat), DirectX::XMVectorGetW(outRotQuat)));
 	q.Normalize();
 	q.Inverse();
@@ -79,12 +84,34 @@ FbxAMatrix DCCManager::SetFbxMatrix(const DirectX::XMMATRIX& pXMMatrix)
 	matrix.SetQ(q);
 	//matrix.SetS(FbxVector4(DirectX::XMVectorGetX(outScale), DirectX::XMVectorGetY(outScale), DirectX::XMVectorGetZ(outScale)));
 
+			break;
+		}
+
+		case fmnext::ZUp:
+		{
+			FbxQuaternion q(FbxQuaternion(DirectX::XMVectorGetX(outRotQuat), DirectX::XMVectorGetZ(outRotQuat), DirectX::XMVectorGetY(outRotQuat), DirectX::XMVectorGetW(outRotQuat)));
+			q.Normalize();
+			q.Inverse();
+
+			matrix.SetIdentity();
+			matrix.SetT(FbxVector4(DirectX::XMVectorGetX(outTrans), DirectX::XMVectorGetZ(outTrans), DirectX::XMVectorGetY(outTrans)));
+			matrix.SetQ(q);
+			//matrix.SetS(FbxVector4(DirectX::XMVectorGetX(outScale), DirectX::XMVectorGetY(outScale), DirectX::XMVectorGetZ(outScale)));
+
+			break;
+		}
+	}
+
 	return matrix;
 }
 
 FbxAMatrix DCCManager::SetFbxMatrix(granny_transform* grannyTransform)
 {
-	// granny_transform = Position[3], Orientation[4], ScaleShear[3]
+	FbxAMatrix matrix;
+	switch (m_axis)
+	{
+	case fmnext::YUp:
+	{
 	FbxQuaternion q(FbxQuaternion(-grannyTransform->Orientation[0], grannyTransform->Orientation[1], grannyTransform->Orientation[2], grannyTransform->Orientation[3]));
 	q.Normalize();
 	q.Inverse();
@@ -93,6 +120,23 @@ FbxAMatrix DCCManager::SetFbxMatrix(granny_transform* grannyTransform)
 	matrix.SetIdentity();
 	matrix.SetT(FbxVector4(-grannyTransform->Position[0], grannyTransform->Position[1], grannyTransform->Position[2]));
 	matrix.SetQ(q);
+
+		break;
+	}
+
+	case fmnext::ZUp:
+	{
+		FbxQuaternion q(FbxQuaternion(grannyTransform->Orientation[0], grannyTransform->Orientation[2], grannyTransform->Orientation[1], grannyTransform->Orientation[3]));
+		q.Normalize();
+		q.Inverse();
+
+		matrix.SetIdentity();
+		matrix.SetT(FbxVector4(grannyTransform->Position[0], grannyTransform->Position[2], grannyTransform->Position[1]));
+		matrix.SetQ(q);
+
+		break;
+	}
+	}
 
 	return matrix;
 }
@@ -1177,7 +1221,7 @@ FbxNode* DCCManager::CreateMesh(const fmnext::Mesh* mesh, const std::string& Nam
 
 	for (uint32_t i = 0; i < numVertices; ++i)
 	{
-		lControlPoints[i] = FbxVector4(-mesh->vertices[i].x, mesh->vertices[i].y, mesh->vertices[i].z);
+		lControlPoints[i] = (m_axis == fmnext::YUp) ? FbxVector4(-mesh->vertices[i].x, mesh->vertices[i].y, mesh->vertices[i].z) : FbxVector4(mesh->vertices[i].x, mesh->vertices[i].z, mesh->vertices[i].y);
 	}
 
 	FbxGeometryElementNormal* lElementNormal = lMesh->CreateElementNormal();
@@ -1187,7 +1231,7 @@ FbxNode* DCCManager::CreateMesh(const fmnext::Mesh* mesh, const std::string& Nam
 
 	for (uint32_t i = 0; i < numVertices; ++i)
 	{
-		lElementNormal->GetDirectArray().Add(FbxVector4(-mesh->normals[i].x, mesh->normals[i].y, mesh->normals[i].z));
+		lElementNormal->GetDirectArray().Add((m_axis == fmnext::YUp) ? FbxVector4(-mesh->normals[i].x, mesh->normals[i].y, mesh->normals[i].z) : FbxVector4(mesh->normals[i].x, mesh->normals[i].z, mesh->normals[i].y));
 	}
 
 	for (uint32_t i = 0; i < numIndices; i += geometry) //numIndices

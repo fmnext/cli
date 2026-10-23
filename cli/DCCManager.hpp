@@ -62,13 +62,19 @@ namespace fmnext
         SCENE,
         BUNDLE
     };
+
+    enum AxisSystem
+    {
+        YUp,
+        ZUp
+    };
 }
 
 class DCCManager
 {
 public:
     DCCManager() = default;
-    DCCManager(const std::string& iPath, const std::string& oPath, uint32_t lod = 0, uint32_t geo = 0, uint32_t opt = 0, fmnext::ResourceType res = fmnext::ResourceType::NONE) : mInputPath(iPath), mOutputPath(oPath), m_lod(lod), m_geo(geo), m_opt(opt), m_res(res) {
+    DCCManager(const std::string& iPath, const std::string& oPath, uint32_t lod = 0, uint32_t geo = 0, uint32_t opt = 0, fmnext::ResourceType res = fmnext::ResourceType::NONE, uint32_t axis = 0) : mInputPath(iPath), mOutputPath(oPath), m_lod(lod), m_geo(geo), m_opt(opt), m_res(res), m_axis(axis) {
     };
 
 	~DCCManager() = default;
@@ -93,7 +99,7 @@ private:
     std::filesystem::path mUIOutputPath{};
     std::filesystem::path mUITexturesOutputPath{};
 
-    uint32_t m_lod = 0, m_geo = 0, m_opt = 0;
+    uint32_t m_lod = 0, m_geo = 0, m_opt = 0, m_axis = 0;
 
     fmnext::ResourceType m_res;
 
