@@ -78,7 +78,6 @@ FbxAMatrix DCCManager::SetFbxMatrix(const DirectX::XMMATRIX& pXMMatrix)
 	q.Normalize();
 	q.Inverse();
 
-	FbxAMatrix matrix;
 	matrix.SetIdentity();
 	matrix.SetT(FbxVector4(-DirectX::XMVectorGetX(outTrans), DirectX::XMVectorGetY(outTrans), DirectX::XMVectorGetZ(outTrans)));
 	matrix.SetQ(q);
@@ -116,7 +115,6 @@ FbxAMatrix DCCManager::SetFbxMatrix(granny_transform* grannyTransform)
 	q.Normalize();
 	q.Inverse();
 
-	FbxAMatrix matrix;
 	matrix.SetIdentity();
 	matrix.SetT(FbxVector4(-grannyTransform->Position[0], grannyTransform->Position[1], grannyTransform->Position[2]));
 	matrix.SetQ(q);
