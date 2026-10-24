@@ -109,7 +109,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.9\include;$(SolutionDir)core;$(SolutionDir)DirectXMesh;$(SolutionDir)DirectXTex;$(SolutionDir)intern;$(SolutionDir)sqlite3\include;$(SolutionDir)g2\include;$(SolutionDir)granny2\gstate;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\local\boost_1_92_0;C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.11\include;$(SolutionDir)core;$(SolutionDir)DirectXMesh;$(SolutionDir)DirectXTex;$(SolutionDir)sqlite3\include;$(SolutionDir)gr\include;$(SolutionDir)gr\gstate;$(SolutionDir)rapidjson\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
     </ClCompile>
@@ -117,14 +117,15 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>libfbxsdk-md.lib;libxml2-md.lib;zlib-md.lib;zip.lib;xcompress64.lib;sqlite3.lib;granny2_x64.lib;granny2_static_x64.lib;gstate_x64.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.9\lib\x64\debug;C:\repository\forzatech\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\local\boost_1_92_0\lib64-msvc-14.5;C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.11\lib\x64\debug;$(SolutionDir)deps\lib;$(SolutionDir)sqlite3\lib;$(SolutionDir)gr\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>/NODEFAULTLIB:LIBCMT /NODEFAULTLIB:MSVCRT /FORCE:MULTIPLE %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PreBuildEvent>
-      <Command>copy "C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.9\lib\x64\debug\libfbxsdk.dll" "$(TargetDir)"
-copy "$(SolutionDir)extern\sqlite3.dll" "$(TargetDir)"
-copy "$(SolutionDir)extern\xg.dll" "$(TargetDir)"
-copy "$(SolutionDir)extern\zip.dll" "$(TargetDir)"</Command>
+      <Command>copy "C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.11\lib\x64\debug\libfbxsdk.dll" "$(TargetDir)"
+copy "$(SolutionDir)sqlite3\bin\sqlite3.dll" "$(TargetDir)"
+copy "$(SolutionDir)deps\bin\xg.dll" "$(TargetDir)"
+copy "$(SolutionDir)deps\bin\zip.dll" "$(TargetDir)"
+copy "$(SolutionDir)cli\fallback.json" "$(TargetDir)"</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -135,7 +136,7 @@ copy "$(SolutionDir)extern\zip.dll" "$(TargetDir)"</Command>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;FBXSDK_SHARED;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\local\boost_1_92_0;C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.11\include;$(SolutionDir)core;$(SolutionDir)DirectXMesh;$(SolutionDir)DirectXTex;$(SolutionDir)deps;$(SolutionDir)gr\include;$(SolutionDir)gr\gstate;$(SolutionDir)rapidjson\include;$(SolutionDir)sqlite3\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\local\boost_1_92_0;C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.11\include;$(SolutionDir)core;$(SolutionDir)DirectXMesh;$(SolutionDir)DirectXTex;$(SolutionDir)sqlite3\include;$(SolutionDir)gr\include;$(SolutionDir)gr\gstate;$(SolutionDir)rapidjson\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <DebugInformationFormat>None</DebugInformationFormat>
       <Optimization>MaxSpeed</Optimization>
@@ -146,7 +147,7 @@ copy "$(SolutionDir)extern\zip.dll" "$(TargetDir)"</Command>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <AdditionalDependencies>libfbxsdk.lib;libxml2.lib;zlib.lib;sqlite3.lib;granny2_static_x64.lib;gstate_x64.lib;xg.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\local\boost_1_92_0\lib64-msvc-14.5;C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.11\lib\x64\release;$(SolutionDir)deps\lib;$(SolutionDir)gr\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\local\boost_1_92_0\lib64-msvc-14.5;C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.11\lib\x64\release;$(SolutionDir)deps\lib;$(SolutionDir)sqlite3\lib;$(SolutionDir)gr\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>/NODEFAULTLIB:LIBCMT %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
@@ -155,7 +156,7 @@ copy "$(SolutionDir)extern\zip.dll" "$(TargetDir)"</Command>
     </PostBuildEvent>
     <PreBuildEvent>
       <Command>copy "C:\Program Files\Autodesk\FBX\FBX SDK\2020.3.11\lib\x64\release\libfbxsdk.dll" "$(TargetDir)"
-copy "$(SolutionDir)deps\bin\sqlite3.dll" "$(TargetDir)"
+copy "$(SolutionDir)sqlite3\bin\sqlite3.dll" "$(TargetDir)"
 copy "$(SolutionDir)deps\bin\xg.dll" "$(TargetDir)"
 copy "$(SolutionDir)deps\bin\zip.dll" "$(TargetDir)"
 copy "$(SolutionDir)cli\fallback.json" "$(TargetDir)"
