@@ -6,11 +6,22 @@ Release available for download on [GitHub](https://github.com/fmnext/cli/release
 
 ## Release History
 
+### Oct 30, 2026 (Release 15)
+* update solution to Visual Studio 2026
+* update PlatformToolset to v145
+* update Boost to v1.92.0
+* update FBX SDK to v2020.3.11
+* update libzip to v1.12.1
+* add vertex colors
+* add bind skin
+* add axis option
+* fix granny2 evaluated curves
+
 ### Aug 30, 2026 (Release 14)
 * remove previous conditional LOD inspection for tires (fix FM23)
 
 ### Jun 30, 2026 (Release 13)
-* enable bunble conversion 
+* enable bundle conversion 
 * fix unexpected FM23 tire behavior
 * add material data exporter
 * add thumbnail dimensions to file name

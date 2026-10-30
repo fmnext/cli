@@ -26,7 +26,9 @@ int main(uint32_t argc, char* argv[])
 			("output, o", po::value<std::string>(), "set a valid output folder")
 			("lod, l", po::value<uint32_t>(), "set level of detail (0 or 1, 2, 3, 4, 5)")
 			("geo, g", po::value<uint32_t>(), "set geometry type (0 = tris, 1 = quads)")
-			("opt, p", po::value<uint32_t>(), "remove isolated vertices (0 = false, 1 = true)");
+			("opt, p", po::value<uint32_t>(), "remove isolated vertices (0 = false, 1 = true)")
+			("axis, a", po::value<uint32_t>(), "set the axis system of the scene (0 = Y-Up, 1 = Z-Up)");
+
 
         po::variables_map vm;
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -46,6 +48,8 @@ int main(uint32_t argc, char* argv[])
             std::filesystem::path input_file(vm["input"].as<std::string>());
 			std::filesystem::path output_file(vm["output"].as<std::string>());
 
+			uint32_t axis = vm.count("axis") ? vm["axis"].as<uint32_t>() : 0;
+
 			uint32_t lod = vm.count("lod") ? vm["lod"].as<uint32_t>() : 0;
 			uint32_t geo = vm.count("geo") ? vm["geo"].as<uint32_t>() : 0;
 			uint32_t opt = vm.count("opt") ? vm["opt"].as<uint32_t>() : 0;
@@ -61,7 +65,7 @@ int main(uint32_t argc, char* argv[])
 			{
 				const auto start{ std::chrono::steady_clock::now() };
 
-				DCCManager manager = DCCManager(input_file.u8string(), output_file.u8string(), lod, geo, opt, fmnext::ResourceType::BUNDLE);
+				DCCManager manager = DCCManager(input_file.u8string(), output_file.u8string(), lod, geo, opt, fmnext::ResourceType::BUNDLE, axis);
 				if (manager.Init())
 				{
 					const auto finish{ std::chrono::steady_clock::now() };
@@ -75,9 +79,9 @@ int main(uint32_t argc, char* argv[])
 
 			if (input_file.has_extension() && input_file.extension() == ".zip")
 			{
-				if (!vm.count("lod") && !vm.count("geo") && !vm.count("opt") || !vm.count("lod") || !vm.count("geo") || !vm.count("opt"))
+				if (!vm.count("axis") && !vm.count("lod") && !vm.count("geo") && !vm.count("opt") || !vm.count("lod") || !vm.count("geo") || !vm.count("opt"))
 				{
-					std::cout << "WARNING: --lod or --geo or --opt or all these parameters are not here, using default --lod 0 --geo 0 --opt 0\n\n";
+					std::cout << "WARNING: --axis or --lod or --geo or --opt or all these parameters are not here, using default --axis 0 --lod 0 --geo 0 --opt 0\n\n";
 				}
 
 				if (!vm.count("output")) {
@@ -86,7 +90,7 @@ int main(uint32_t argc, char* argv[])
 					return 1;
 				}
 
-				if (lod > 6 && geo > 1 && opt > 1 || lod > 6 || geo > 1 || opt > 1)
+				if (axis > 1 && lod > 1 && lod > 6 && geo > 1 && opt > 1 || axis > 1 || lod > 6 || geo > 1 || opt > 1)
 				{
 					std::cout << "ERROR: Failed to convert, a parameter with an invalid range was detected. \n\n";
 
@@ -95,7 +99,7 @@ int main(uint32_t argc, char* argv[])
 
 				const auto start{ std::chrono::steady_clock::now() };
 
-				DCCManager manager = DCCManager(input_file.u8string(), output_file.u8string(), lod, geo, opt, fmnext::ResourceType::SCENE);
+				DCCManager manager = DCCManager(input_file.u8string(), output_file.u8string(), lod, geo, opt, fmnext::ResourceType::SCENE, axis);
 				if (manager.Init())
 				{
 					const auto finish{ std::chrono::steady_clock::now() };

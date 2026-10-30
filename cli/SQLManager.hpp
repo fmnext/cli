@@ -110,7 +110,7 @@ namespace fmnext
                 }
             }
 
-            //rc = sqlite3_exec(m_db, query.c_str(), callback, 0, &zErrMsg);
+            //rc = sqlite3_exec(m_db, query.c_str(), sqlManagerCallback, 0, &zErrMsg);
 
             return nullptr;
         }
@@ -120,15 +120,5 @@ namespace fmnext
         sqlite3* mInstance = nullptr;
         std::shared_ptr<DataBaseRecords> m_records = nullptr;
         std::string mPath, mMediaName;    
-        //static std::unordered_map<std::string, std::string> sql_data;
-
-        static int callback(void* NotUsed, int argc, char** argv, char** azColName)
-        {
-            for (int i = 0; i < argc; i++) {
-                //sql_data.try_emplace(azColName[i], argv[i]);
-                printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
-            }
-            return 0;
-        }
     };
 }
